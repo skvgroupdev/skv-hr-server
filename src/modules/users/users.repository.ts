@@ -15,18 +15,23 @@ export class UsersRepository {
     return this.userModel.findById(id).select('+password +refreshToken').exec();
   }
 
+  private phoneVariants(phone: string): string[] {
+    const local = phone.replace(/^\+?856/, '').replace(/^0/, '');
+    return [local, `0${local}`, `856${local}`, `+856${local}`];
+  }
+
   async findByPhoneAndCompany(
     phone: string,
     companyId: Types.ObjectId | null,
   ): Promise<UserDocument | null> {
     return this.userModel
-      .findOne({ phone, companyId })
+      .findOne({ phone: { $in: this.phoneVariants(phone) }, companyId })
       .select('+password +refreshToken')
       .exec();
   }
 
   async findAllByPhone(phone: string): Promise<UserDocument[]> {
-    return this.userModel.find({ phone }).exec();
+    return this.userModel.find({ phone: { $in: this.phoneVariants(phone) } }).exec();
   }
 
   async create(data: Partial<User>): Promise<UserDocument> {
