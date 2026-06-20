@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, SortOrder, Types } from 'mongoose';
-import { PayrollPeriod, PayrollPeriodDocument } from './schemas/payroll-period.schema';
+import {
+  PayrollPeriod,
+  PayrollPeriodDocument,
+} from './schemas/payroll-period.schema';
 import { Payslip, PayslipDocument } from './schemas/payslip.schema';
 
 const MAX_LIMIT = 100;
@@ -9,36 +12,67 @@ const MAX_LIMIT = 100;
 @Injectable()
 export class PayrollRepository {
   constructor(
-    @InjectModel(PayrollPeriod.name) private readonly periodModel: Model<PayrollPeriodDocument>,
-    @InjectModel(Payslip.name) private readonly payslipModel: Model<PayslipDocument>,
+    @InjectModel(PayrollPeriod.name)
+    private readonly periodModel: Model<PayrollPeriodDocument>,
+    @InjectModel(Payslip.name)
+    private readonly payslipModel: Model<PayslipDocument>,
   ) {}
 
   createPeriod(data: Partial<PayrollPeriod>): Promise<PayrollPeriodDocument> {
     return this.periodModel.create(data);
   }
 
-  findPeriodById(id: string, tenantId: Types.ObjectId): Promise<PayrollPeriodDocument | null> {
+  findPeriodById(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<PayrollPeriodDocument | null> {
     return this.periodModel.findOne({ _id: id, tenantId }).exec();
   }
 
-  async findPeriodsPaginated(tenantId: Types.ObjectId, page: number, limit: number) {
+  async findPeriodsPaginated(
+    tenantId: Types.ObjectId,
+    page: number,
+    limit: number,
+  ) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
-      this.periodModel.find({ tenantId }).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      this.periodModel
+        .find({ tenantId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
       this.periodModel.countDocuments({ tenantId }).exec(),
     ]);
     return { items, total };
   }
 
-  updatePeriod(id: string, tenantId: Types.ObjectId, data: Partial<PayrollPeriod>): Promise<PayrollPeriodDocument | null> {
-    return this.periodModel.findOneAndUpdate({ _id: id, tenantId }, data, { returnDocument: 'after' }).exec();
+  updatePeriod(
+    id: string,
+    tenantId: Types.ObjectId,
+    data: Partial<PayrollPeriod>,
+  ): Promise<PayrollPeriodDocument | null> {
+    return this.periodModel
+      .findOneAndUpdate({ _id: id, tenantId }, data, {
+        returnDocument: 'after',
+      })
+      .exec();
   }
 
-  async createPayslips(payslips: Partial<Payslip>[]): Promise<PayslipDocument[]> {
-    return this.payslipModel.insertMany(payslips) as unknown as PayslipDocument[];
+  async createPayslips(
+    payslips: Partial<Payslip>[],
+  ): Promise<PayslipDocument[]> {
+    return this.payslipModel.insertMany(
+      payslips,
+    ) as unknown as PayslipDocument[];
   }
 
-  async findPayslipsByPeriod(tenantId: Types.ObjectId, periodId: Types.ObjectId, page: number, limit: number) {
+  async findPayslipsByPeriod(
+    tenantId: Types.ObjectId,
+    periodId: Types.ObjectId,
+    page: number,
+    limit: number,
+  ) {
     const skip = (page - 1) * limit;
     const filter = { tenantId, payrollPeriodId: periodId };
     const [items, total] = await Promise.all([
@@ -53,21 +87,59 @@ export class PayrollRepository {
     return { items, total };
   }
 
-  async findMyPayslips(tenantId: Types.ObjectId, employeeId: Types.ObjectId, page: number, limit: number) {
+  async findMyPayslips(
+    tenantId: Types.ObjectId,
+    employeeId: Types.ObjectId,
+    page: number,
+    limit: number,
+  ) {
     const skip = (page - 1) * limit;
     const filter = { tenantId, employeeId };
     const [items, total] = await Promise.all([
-      this.payslipModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      this.payslipModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
       this.payslipModel.countDocuments(filter).exec(),
     ]);
     return { items, total };
   }
 
-  findPayslipById(id: string, tenantId: Types.ObjectId): Promise<PayslipDocument | null> {
+  findPayslipById(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<PayslipDocument | null> {
     return this.payslipModel.findOne({ _id: id, tenantId }).exec();
   }
 
-  findPayslipByIdWithPopulate(id: string, tenantId: Types.ObjectId): Promise<PayslipDocument | null> {
+  updatePayslip(
+    id: string,
+    tenantId: Types.ObjectId,
+    data: Partial<Payslip>,
+  ): Promise<PayslipDocument | null> {
+    return this.payslipModel
+      .findOneAndUpdate({ _id: id, tenantId }, data, {
+        returnDocument: 'after',
+      })
+      .exec();
+  }
+
+  async updatePayslipStatuses(
+    tenantId: Types.ObjectId,
+    periodId: Types.ObjectId,
+    status: Payslip['status'],
+  ): Promise<void> {
+    await this.payslipModel
+      .updateMany({ tenantId, payrollPeriodId: periodId }, { status })
+      .exec();
+  }
+
+  findPayslipByIdWithPopulate(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<PayslipDocument | null> {
     return this.payslipModel
       .findOne({ _id: id, tenantId })
       .populate('employeeId', 'firstName lastName employeeCode')
@@ -80,12 +152,21 @@ export class PayrollRepository {
     periodId: Types.ObjectId,
     employeeId: Types.ObjectId,
   ): Promise<PayslipDocument | null> {
-    return this.payslipModel.findOne({ tenantId, payrollPeriodId: periodId, employeeId }).exec();
+    return this.payslipModel
+      .findOne({ tenantId, payrollPeriodId: periodId, employeeId })
+      .exec();
   }
 
   async findAllPayslipsPaginated(
     tenantId: Types.ObjectId,
-    filter: { periodId?: string; employeeId?: string; status?: string; employeeIds?: Types.ObjectId[]; startDate?: string; endDate?: string },
+    filter: {
+      periodId?: string;
+      employeeId?: string;
+      status?: string;
+      employeeIds?: Types.ObjectId[];
+      startDate?: string;
+      endDate?: string;
+    },
     page: number,
     limit: number,
     sort: string,
@@ -94,12 +175,22 @@ export class PayrollRepository {
     const skip = (page - 1) * safeLimit;
     const query: Record<string, unknown> = { tenantId };
 
-    if (filter.periodId) query.payrollPeriodId = new Types.ObjectId(filter.periodId);
+    if (filter.periodId)
+      query.payrollPeriodId = new Types.ObjectId(filter.periodId);
     if (filter.status) query.status = filter.status;
-    if (filter.employeeId) query.employeeId = new Types.ObjectId(filter.employeeId);
+    if (filter.employeeId)
+      query.employeeId = new Types.ObjectId(filter.employeeId);
     if (filter.employeeIds) query.employeeId = { $in: filter.employeeIds };
-    if (filter.startDate) query['createdAt'] = { ...(query['createdAt'] as object), $gte: new Date(filter.startDate) };
-    if (filter.endDate) query['createdAt'] = { ...(query['createdAt'] as object), $lte: new Date(filter.endDate) };
+    if (filter.startDate)
+      query['createdAt'] = {
+        ...(query['createdAt'] as object),
+        $gte: new Date(filter.startDate),
+      };
+    if (filter.endDate)
+      query['createdAt'] = {
+        ...(query['createdAt'] as object),
+        $lte: new Date(filter.endDate),
+      };
 
     const sortObj = buildSortObject(sort);
     const [data, total] = await Promise.all([
@@ -137,14 +228,19 @@ export class PayrollRepository {
     return { data, total };
   }
 
-  async aggregatePeriodReport(tenantId: Types.ObjectId, periodId: Types.ObjectId) {
+  async aggregatePeriodReport(
+    tenantId: Types.ObjectId,
+    periodId: Types.ObjectId,
+  ) {
     const [result] = await this.payslipModel.aggregate([
       { $match: { tenantId, payrollPeriodId: periodId } },
       {
         $group: {
           _id: null,
           payslipCount: { $sum: 1 },
-          approvedCount: { $sum: { $cond: [{ $eq: ['$status', 'APPROVED'] }, 1, 0] } },
+          approvedCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'APPROVED'] }, 1, 0] },
+          },
           totalGrossSalary: { $sum: '$grossSalary' },
           totalNetSalary: { $sum: '$netSalary' },
           totalEmployeeSsAmount: { $sum: '$employeeSsAmount' },
@@ -175,19 +271,21 @@ export class PayrollRepository {
       { $project: { _id: 0 } },
     ]);
 
-    return result ?? {
-      payslipCount: 0,
-      approvedCount: 0,
-      totalGrossSalary: 0,
-      totalNetSalary: 0,
-      totalEmployeeSsAmount: 0,
-      totalEmployerSsAmount: 0,
-      totalIncomeTax: 0,
-      totalOtAmount: 0,
-      totalLeaveDeductions: 0,
-      totalAllowances: 0,
-      totalOtherDeductions: 0,
-    };
+    return (
+      result ?? {
+        payslipCount: 0,
+        approvedCount: 0,
+        totalGrossSalary: 0,
+        totalNetSalary: 0,
+        totalEmployeeSsAmount: 0,
+        totalEmployerSsAmount: 0,
+        totalIncomeTax: 0,
+        totalOtAmount: 0,
+        totalLeaveDeductions: 0,
+        totalAllowances: 0,
+        totalOtherDeductions: 0,
+      }
+    );
   }
 
   async getFinanceSummaryByEmployee(
@@ -198,7 +296,12 @@ export class PayrollRepository {
     totalNetSalary: number;
     totalGrossSalary: number;
     averageNetSalary: number;
-    monthlyBreakdown: { year: number; month: number; netSalary: number; grossSalary: number }[];
+    monthlyBreakdown: {
+      year: number;
+      month: number;
+      netSalary: number;
+      grossSalary: number;
+    }[];
   }> {
     const [summary] = await this.payslipModel.aggregate([
       { $match: { tenantId, employeeId } },
@@ -217,7 +320,10 @@ export class PayrollRepository {
       { $match: { tenantId, employeeId } },
       {
         $group: {
-          _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+          },
           netSalary: { $sum: '$netSalary' },
           grossSalary: { $sum: '$grossSalary' },
         },

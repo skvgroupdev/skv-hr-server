@@ -1,4 +1,16 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { AnnouncementsService } from './announcements.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { UpdateAnnouncementDto } from './dto/update-announcement.dto';
@@ -6,16 +18,25 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { RequireFeatures } from '../../common/decorators/require-features.decorator';
 
 @Controller('announcements')
 @UseGuards(RolesGuard)
+@RequireFeatures('announcement')
 export class AnnouncementsController {
   constructor(private readonly announcementsService: AnnouncementsService) {}
 
   @Post()
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async create(@Body() dto: CreateAnnouncementDto, @CurrentUser() user: JwtPayload) {
-    const item = await this.announcementsService.create(user.companyId!, user.sub, dto);
+  async create(
+    @Body() dto: CreateAnnouncementDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const item = await this.announcementsService.create(
+      user.companyId!,
+      user.sub,
+      dto,
+    );
     return { data: item };
   }
 
@@ -54,8 +75,16 @@ export class AnnouncementsController {
 
   @Patch(':id')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async update(@Param('id') id: string, @Body() dto: UpdateAnnouncementDto, @CurrentUser() user: JwtPayload) {
-    const item = await this.announcementsService.update(user.companyId!, id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateAnnouncementDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const item = await this.announcementsService.update(
+      user.companyId!,
+      id,
+      dto,
+    );
     return { data: item };
   }
 

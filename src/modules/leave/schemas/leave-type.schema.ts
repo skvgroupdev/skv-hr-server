@@ -29,6 +29,9 @@ export class LeaveType {
   @Prop({ default: true })
   isPaid: boolean;
 
+  @Prop({ type: String, enum: ['LEAVE', 'REST_DAY'], default: 'LEAVE' })
+  category: 'LEAVE' | 'REST_DAY';
+
   @Prop({ default: false })
   requireAttachment: boolean;
 

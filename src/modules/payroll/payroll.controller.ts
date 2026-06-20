@@ -1,21 +1,46 @@
-import { Controller, Post, Get, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
-import { QueryPayslipsDto, QueryEmployeePayslipsDto } from './dto/query-payslips.dto';
+import {
+  QueryPayslipsDto,
+  QueryEmployeePayslipsDto,
+} from './dto/query-payslips.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { RequireFeatures } from '../../common/decorators/require-features.decorator';
+import { UpdatePayslipAdjustmentsDto } from './dto/update-payslip-adjustments.dto';
+import { UpdatePayrollPolicyDto } from './dto/update-payroll-policy.dto';
 
 @Controller('payroll')
 @UseGuards(RolesGuard)
+@RequireFeatures('payroll')
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 
   @Post('periods')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async createPeriod(@Body() dto: CreatePayrollPeriodDto, @CurrentUser() user: JwtPayload) {
-    const period = await this.payrollService.createPeriod(user.companyId!, user.sub, dto);
+  async createPeriod(
+    @Body() dto: CreatePayrollPeriodDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const period = await this.payrollService.createPeriod(
+      user.companyId!,
+      user.sub,
+      dto,
+    );
     return { data: period };
   }
 
@@ -40,27 +65,48 @@ export class PayrollController {
     return { data: period };
   }
 
+  // DRAFT → GENERATED
   @Post('periods/:id/generate')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
-  async generatePayroll(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const period = await this.payrollService.generatePayroll(user.companyId!, id, user.sub);
+  async generatePayroll(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const period = await this.payrollService.generatePayroll(
+      user.companyId!,
+      id,
+      user.sub,
+    );
     return { data: period };
   }
 
-  @Post('periods/:id/approve')
-  @Roles('COMPANY_OWNER')
+  // GENERATED → HR_REVIEWED
+  @Post('periods/:id/hr-review')
+  @Roles('HR_ADMIN', 'COMPANY_OWNER')
   @HttpCode(HttpStatus.OK)
-  async approvePeriod(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const period = await this.payrollService.approvePeriod(user.companyId!, id, user.sub);
+  async hrReviewPeriod(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const period = await this.payrollService.hrReviewPeriod(
+      user.companyId!,
+      id,
+      user.sub,
+    );
     return { data: period };
   }
 
-  @Post('periods/:id/lock')
+  // HR_REVIEWED → PAID
+  @Post('periods/:id/pay')
   @Roles('COMPANY_OWNER')
   @HttpCode(HttpStatus.OK)
-  async lockPeriod(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const period = await this.payrollService.lockPeriod(user.companyId!, id, user.sub);
+  async payPeriod(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    const period = await this.payrollService.payPeriod(
+      user.companyId!,
+      id,
+      user.sub,
+    );
     return { data: period };
   }
 
@@ -82,7 +128,10 @@ export class PayrollController {
 
   @Get('payslips')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async getAllPayslips(@Query() query: QueryPayslipsDto, @CurrentUser() user: JwtPayload) {
+  async getAllPayslips(
+    @Query() query: QueryPayslipsDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.payrollService.getAllPayslips(user.companyId!, {
       page: query.page ? parseInt(query.page, 10) : 1,
       limit: query.limit ? parseInt(query.limit, 10) : 20,
@@ -97,9 +146,29 @@ export class PayrollController {
 
   @Get('payslips/:id')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async getPayslipById(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+  async getPayslipById(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
     const data = await this.payrollService.getPayslipById(user.companyId!, id);
     return { data };
+  }
+
+  @Patch('payslips/:id/adjustments')
+  @Roles('HR_ADMIN')
+  async updatePayslipAdjustments(
+    @Param('id') id: string,
+    @Body() dto: UpdatePayslipAdjustmentsDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return {
+      data: await this.payrollService.updatePayslipAdjustments(
+        user.companyId!,
+        id,
+        user.sub,
+        dto,
+      ),
+    };
   }
 
   @Get('employees/:employeeId/payslips')
@@ -109,10 +178,14 @@ export class PayrollController {
     @Query() query: QueryEmployeePayslipsDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.payrollService.getEmployeePayslips(user.companyId!, employeeId, {
-      page: query.page ? parseInt(query.page, 10) : 1,
-      limit: query.limit ? parseInt(query.limit, 10) : 20,
-    });
+    return this.payrollService.getEmployeePayslips(
+      user.companyId!,
+      employeeId,
+      {
+        page: query.page ? parseInt(query.page, 10) : 1,
+        limit: query.limit ? parseInt(query.limit, 10) : 20,
+      },
+    );
   }
 
   @Get('employees/:employeeId/finance-summary')
@@ -121,7 +194,10 @@ export class PayrollController {
     @Param('employeeId') employeeId: string,
     @CurrentUser() user: JwtPayload,
   ) {
-    const data = await this.payrollService.getEmployeeFinanceSummary(user.companyId!, employeeId);
+    const data = await this.payrollService.getEmployeeFinanceSummary(
+      user.companyId!,
+      employeeId,
+    );
     return { data };
   }
 
@@ -141,14 +217,43 @@ export class PayrollController {
 
   @Get('my-payslips/:id')
   async getMyPayslip(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const payslip = await this.payrollService.getMyPayslip(user.companyId!, user.sub, id);
+    const payslip = await this.payrollService.getMyPayslip(
+      user.companyId!,
+      user.sub,
+      id,
+    );
     return { data: payslip };
   }
 
   @Get('report')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async getReport(@Query('periodId') periodId: string, @CurrentUser() user: JwtPayload) {
+  async getReport(
+    @Query('periodId') periodId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
     const data = await this.payrollService.getReport(user.companyId!, periodId);
+    return { data };
+  }
+
+  @Get('policy')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
+  async getPolicy(@CurrentUser() user: JwtPayload) {
+    const data = await this.payrollService.getPayrollPolicy(user.companyId!);
+    return { data };
+  }
+
+  @Patch('policy')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
+  async updatePolicy(
+    @Body() dto: UpdatePayrollPolicyDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const data = await this.payrollService.updatePayrollPolicy(
+      user.companyId!,
+      user.sub,
+      user.role,
+      dto,
+    );
     return { data };
   }
 }

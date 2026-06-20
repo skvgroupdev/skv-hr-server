@@ -2,17 +2,26 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { LeaveType, LeaveTypeDocument } from './schemas/leave-type.schema';
-import { LeaveBalance, LeaveBalanceDocument } from './schemas/leave-balance.schema';
-import { LeaveRequest, LeaveRequestDocument } from './schemas/leave-request.schema';
+import {
+  LeaveBalance,
+  LeaveBalanceDocument,
+} from './schemas/leave-balance.schema';
+import {
+  LeaveRequest,
+  LeaveRequestDocument,
+} from './schemas/leave-request.schema';
 
 const MAX_LIMIT = 100;
 
 @Injectable()
 export class LeaveRepository {
   constructor(
-    @InjectModel(LeaveType.name) private readonly leaveTypeModel: Model<LeaveTypeDocument>,
-    @InjectModel(LeaveBalance.name) private readonly balanceModel: Model<LeaveBalanceDocument>,
-    @InjectModel(LeaveRequest.name) private readonly requestModel: Model<LeaveRequestDocument>,
+    @InjectModel(LeaveType.name)
+    private readonly leaveTypeModel: Model<LeaveTypeDocument>,
+    @InjectModel(LeaveBalance.name)
+    private readonly balanceModel: Model<LeaveBalanceDocument>,
+    @InjectModel(LeaveRequest.name)
+    private readonly requestModel: Model<LeaveRequestDocument>,
   ) {}
 
   // LeaveType
@@ -24,16 +33,36 @@ export class LeaveRepository {
     return this.leaveTypeModel.find({ tenantId, isActive: true }).exec();
   }
 
-  findLeaveTypeById(id: string, tenantId: Types.ObjectId): Promise<LeaveTypeDocument | null> {
+  findLeaveTypeById(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<LeaveTypeDocument | null> {
     return this.leaveTypeModel.findOne({ _id: id, tenantId }).exec();
   }
 
-  updateLeaveType(id: string, tenantId: Types.ObjectId, data: Partial<LeaveType>): Promise<LeaveTypeDocument | null> {
-    return this.leaveTypeModel.findOneAndUpdate({ _id: id, tenantId }, data, { returnDocument: 'after' }).exec();
+  updateLeaveType(
+    id: string,
+    tenantId: Types.ObjectId,
+    data: Partial<LeaveType>,
+  ): Promise<LeaveTypeDocument | null> {
+    return this.leaveTypeModel
+      .findOneAndUpdate({ _id: id, tenantId }, data, {
+        returnDocument: 'after',
+      })
+      .exec();
   }
 
-  softDeleteLeaveType(id: string, tenantId: Types.ObjectId): Promise<LeaveTypeDocument | null> {
-    return this.leaveTypeModel.findOneAndUpdate({ _id: id, tenantId }, { isActive: false }, { returnDocument: 'after' }).exec();
+  softDeleteLeaveType(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<LeaveTypeDocument | null> {
+    return this.leaveTypeModel
+      .findOneAndUpdate(
+        { _id: id, tenantId },
+        { isActive: false },
+        { returnDocument: 'after' },
+      )
+      .exec();
   }
 
   // LeaveBalance
@@ -43,12 +72,20 @@ export class LeaveRepository {
     leaveTypeId: Types.ObjectId,
     year: number,
   ): Promise<LeaveBalanceDocument | null> {
-    return this.balanceModel.findOne({ tenantId, employeeId, leaveTypeId, year }).exec();
+    return this.balanceModel
+      .findOne({ tenantId, employeeId, leaveTypeId, year })
+      .exec();
   }
 
-  findBalancesByEmployee(tenantId: Types.ObjectId, employeeId: Types.ObjectId): Promise<LeaveBalanceDocument[]> {
+  findBalancesByEmployee(
+    tenantId: Types.ObjectId,
+    employeeId: Types.ObjectId,
+  ): Promise<LeaveBalanceDocument[]> {
     const year = new Date().getFullYear();
-    return this.balanceModel.find({ tenantId, employeeId, year }).populate('leaveTypeId').exec();
+    return this.balanceModel
+      .find({ tenantId, employeeId, year })
+      .populate('leaveTypeId')
+      .exec();
   }
 
   async upsertBalance(
@@ -58,13 +95,15 @@ export class LeaveRepository {
     year: number,
     adjustUsed: number,
   ): Promise<LeaveBalanceDocument> {
-    const balance = await this.balanceModel.findOneAndUpdate(
-      { tenantId, employeeId, leaveTypeId, year },
-      {
-        $inc: { usedDays: adjustUsed, remainingDays: -adjustUsed },
-      },
-      { returnDocument: 'after', upsert: true },
-    ).exec();
+    const balance = await this.balanceModel
+      .findOneAndUpdate(
+        { tenantId, employeeId, leaveTypeId, year },
+        {
+          $inc: { usedDays: adjustUsed, remainingDays: -adjustUsed },
+        },
+        { returnDocument: 'after', upsert: true },
+      )
+      .exec();
     return balance!;
   }
 
@@ -79,11 +118,13 @@ export class LeaveRepository {
     year: number,
     adjustment: number,
   ): Promise<LeaveBalanceDocument | null> {
-    return this.balanceModel.findOneAndUpdate(
-      { tenantId, employeeId, leaveTypeId, year },
-      { $inc: { totalDays: adjustment, remainingDays: adjustment } },
-      { returnDocument: 'after', upsert: true },
-    ).exec();
+    return this.balanceModel
+      .findOneAndUpdate(
+        { tenantId, employeeId, leaveTypeId, year },
+        { $inc: { totalDays: adjustment, remainingDays: adjustment } },
+        { returnDocument: 'after', upsert: true },
+      )
+      .exec();
   }
 
   // LeaveRequest
@@ -91,7 +132,10 @@ export class LeaveRepository {
     return this.requestModel.create(data);
   }
 
-  findRequestById(id: string, tenantId: Types.ObjectId): Promise<LeaveRequestDocument | null> {
+  findRequestById(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<LeaveRequestDocument | null> {
     return this.requestModel.findOne({ _id: id, tenantId }).exec();
   }
 
@@ -104,13 +148,20 @@ export class LeaveRepository {
     const skip = (page - 1) * limit;
     const filter = { tenantId, employeeId };
     const [items, total] = await Promise.all([
-      this.requestModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      this.requestModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
       this.requestModel.countDocuments(filter).exec(),
     ]);
     return { items, total };
   }
 
-  findPendingRequests(tenantId: Types.ObjectId): Promise<LeaveRequestDocument[]> {
+  findPendingRequests(
+    tenantId: Types.ObjectId,
+  ): Promise<LeaveRequestDocument[]> {
     return this.requestModel
       .find({ tenantId, status: 'PENDING' })
       .sort({ createdAt: -1 })
@@ -119,8 +170,16 @@ export class LeaveRepository {
       .exec();
   }
 
-  updateRequest(id: string, tenantId: Types.ObjectId, data: Partial<LeaveRequest>): Promise<LeaveRequestDocument | null> {
-    return this.requestModel.findOneAndUpdate({ _id: id, tenantId }, data, { returnDocument: 'after' }).exec();
+  updateRequest(
+    id: string,
+    tenantId: Types.ObjectId,
+    data: Partial<LeaveRequest>,
+  ): Promise<LeaveRequestDocument | null> {
+    return this.requestModel
+      .findOneAndUpdate({ _id: id, tenantId }, data, {
+        returnDocument: 'after',
+      })
+      .exec();
   }
 
   findOverlapping(
@@ -129,17 +188,22 @@ export class LeaveRepository {
     startDate: Date,
     endDate: Date,
   ): Promise<LeaveRequestDocument | null> {
-    return this.requestModel.findOne({
-      tenantId,
-      employeeId,
-      status: { $in: ['PENDING', 'APPROVED'] },
-      $or: [
-        { startDate: { $lte: endDate }, endDate: { $gte: startDate } },
-      ],
-    }).exec();
+    return this.requestModel
+      .findOne({
+        tenantId,
+        employeeId,
+        status: { $in: ['PENDING', 'APPROVED'] },
+        $or: [{ startDate: { $lte: endDate }, endDate: { $gte: startDate } }],
+      })
+      .exec();
   }
 
-  async findReport(tenantId: Types.ObjectId, filter: Record<string, unknown>, page: number, limit: number) {
+  async findReport(
+    tenantId: Types.ObjectId,
+    filter: Record<string, unknown>,
+    page: number,
+    limit: number,
+  ) {
     const skip = (page - 1) * limit;
     const query = { tenantId, ...filter };
     const [items, total] = await Promise.all([
@@ -160,7 +224,14 @@ export class LeaveRepository {
     tenantId: Types.ObjectId,
     startDate: Date,
     endDate: Date,
-  ): Promise<{ employeeId: Types.ObjectId; totalDays: number }[]> {
+  ): Promise<
+    {
+      employeeId: Types.ObjectId;
+      totalDays: number;
+      category: 'LEAVE' | 'REST_DAY';
+      isPaid: boolean;
+    }[]
+  > {
     return this.requestModel
       .find({
         tenantId,
@@ -168,8 +239,24 @@ export class LeaveRepository {
         startDate: { $gte: startDate },
         endDate: { $lte: endDate },
       })
-      .select('employeeId totalDays')
+      .select('employeeId totalDays leaveTypeId')
+      .populate('leaveTypeId', 'category isPaid')
       .lean()
-      .exec() as unknown as { employeeId: Types.ObjectId; totalDays: number }[];
+      .exec()
+      .then((items) =>
+        items.map((item) => ({
+          employeeId: item.employeeId,
+          totalDays: item.totalDays,
+          category:
+            (
+              item.leaveTypeId as unknown as
+                | { category?: 'LEAVE' | 'REST_DAY'; isPaid?: boolean }
+                | undefined
+            )?.category ?? 'LEAVE',
+          isPaid:
+            (item.leaveTypeId as unknown as { isPaid?: boolean } | undefined)
+              ?.isPaid ?? false,
+        })),
+      );
   }
 }

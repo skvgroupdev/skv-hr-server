@@ -1,13 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  UnauthorizedException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Types } from 'mongoose';
 import { AuthService } from '../auth.service';
 import { UsersRepository } from '../../users/users.repository';
 import { AuditLogService } from '../../audit-logs/audit-log.service';
 import { UserDocument } from '../../users/schemas/user.schema';
+import { EmployeesRepository } from '../../employees/employees.repository';
+import { ShiftsRepository } from '../../shifts/shifts.repository';
+import { CompaniesRepository } from '../../companies/companies.repository';
+import { PlansRepository } from '../../plans/plans.repository';
 
 const mockUserId = new Types.ObjectId();
 const mockCompanyId = new Types.ObjectId();
@@ -72,6 +80,24 @@ describe('AuthService', () => {
           provide: AuditLogService,
           useValue: { log: jest.fn().mockResolvedValue(undefined) },
         },
+        {
+          provide: EmployeesRepository,
+          useValue: { findByUserId: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: ShiftsRepository,
+          useValue: {
+            findCurrentAssignment: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: CompaniesRepository,
+          useValue: { findById: jest.fn().mockResolvedValue({ planId: null }) },
+        },
+        {
+          provide: PlansRepository,
+          useValue: { findById: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -95,12 +121,17 @@ describe('AuthService', () => {
       usersRepository.findByIdWithSensitive.mockResolvedValue(user);
       usersRepository.updateRefreshToken.mockResolvedValue();
 
-      const result = await service.login({ phone: user.phone, password: 'Password@1' });
+      const result = await service.login({
+        phone: user.phone,
+        password: 'Password@1',
+      });
 
       expect(result.accessToken).toBe('mock_token');
       expect(result.refreshToken).toBe('mock_token');
       expect(result.user.phone).toBe(user.phone);
-      expect(auditLogService.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'LOGIN' }));
+      expect(auditLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'LOGIN' }),
+      );
     });
 
     it('should throw UnauthorizedException on wrong password', async () => {
@@ -159,7 +190,10 @@ describe('AuthService', () => {
       usersRepository.findByIdWithSensitive.mockResolvedValue(superAdmin);
       usersRepository.updateRefreshToken.mockResolvedValue();
 
-      const result = await service.login({ phone: superAdmin.phone, password: 'Admin@1234' });
+      const result = await service.login({
+        phone: superAdmin.phone,
+        password: 'Admin@1234',
+      });
 
       expect(result.user.role).toBe('SUPER_ADMIN');
     });
@@ -186,9 +220,9 @@ describe('AuthService', () => {
       const user = makeUser({ refreshToken: null });
       usersRepository.findByIdWithSensitive.mockResolvedValue(user);
 
-      await expect(service.refresh(mockUserId.toString(), 'any_token')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.refresh(mockUserId.toString(), 'any_token'),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw UnauthorizedException when refresh token does not match stored hash', async () => {
@@ -196,17 +230,17 @@ describe('AuthService', () => {
       const user = makeUser({ refreshToken: hashedToken });
       usersRepository.findByIdWithSensitive.mockResolvedValue(user);
 
-      await expect(service.refresh(mockUserId.toString(), 'wrong_token')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.refresh(mockUserId.toString(), 'wrong_token'),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw UnauthorizedException when user not found', async () => {
       usersRepository.findByIdWithSensitive.mockResolvedValue(null);
 
-      await expect(service.refresh(mockUserId.toString(), 'any')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.refresh(mockUserId.toString(), 'any'),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -240,7 +274,9 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException when user not found', async () => {
       usersRepository.findById.mockResolvedValue(null);
 
-      await expect(service.getMe(mockUserId.toString())).rejects.toThrow(UnauthorizedException);
+      await expect(service.getMe(mockUserId.toString())).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 

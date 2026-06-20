@@ -1,12 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { BranchesService } from '../branches.service';
 import { BranchesRepository } from '../branches.repository';
 import { AuditLogService } from '../../audit-logs/audit-log.service';
 import { CreateBranchDto } from '../dto/create-branch.dto';
+import { EmployeesRepository } from '../../employees/employees.repository';
+import { UsersRepository } from '../../users/users.repository';
+import { CompaniesRepository } from '../../companies/companies.repository';
+import { PlansRepository } from '../../plans/plans.repository';
 
 const TENANT_ID = new Types.ObjectId().toString();
+const PLAN_ID = new Types.ObjectId().toString();
 const ACTOR_ID = new Types.ObjectId().toString();
 const BRANCH_ID = new Types.ObjectId().toString();
 
@@ -23,6 +28,8 @@ function makeBranchDoc(overrides = {}) {
 describe('BranchesService', () => {
   let service: BranchesService;
   let branchesRepository: jest.Mocked<BranchesRepository>;
+  let companiesRepository: jest.Mocked<CompaniesRepository>;
+  let plansRepository: jest.Mocked<PlansRepository>;
   let auditLogService: jest.Mocked<AuditLogService>;
 
   beforeEach(async () => {
@@ -44,12 +51,39 @@ describe('BranchesService', () => {
           provide: AuditLogService,
           useValue: { log: jest.fn() },
         },
+        {
+          provide: EmployeesRepository,
+          useValue: { findById: jest.fn(), update: jest.fn() },
+        },
+        {
+          provide: UsersRepository,
+          useValue: { updateRoleAndBranch: jest.fn() },
+        },
+        {
+          provide: CompaniesRepository,
+          useValue: { findById: jest.fn() },
+        },
+        {
+          provide: PlansRepository,
+          useValue: { findById: jest.fn() },
+        },
       ],
     }).compile();
 
     service = module.get<BranchesService>(BranchesService);
     branchesRepository = module.get(BranchesRepository);
+    companiesRepository = module.get(CompaniesRepository);
+    plansRepository = module.get(PlansRepository);
     auditLogService = module.get(AuditLogService);
+
+    companiesRepository.findById.mockResolvedValue({
+      planId: new Types.ObjectId(PLAN_ID),
+    } as never);
+    plansRepository.findById.mockResolvedValue({
+      isActive: true,
+      maxBranches: 3,
+    } as never);
+    branchesRepository.countByTenant.mockResolvedValue(0);
   });
 
   describe('create', () => {
@@ -71,6 +105,19 @@ describe('BranchesService', () => {
       );
       expect(result).toEqual(branchDoc);
     });
+
+    it('throws ForbiddenException when branch quota is reached', async () => {
+      branchesRepository.countByTenant.mockResolvedValue(3);
+      plansRepository.findById.mockResolvedValue({
+        isActive: true,
+        maxBranches: 3,
+      } as never);
+
+      await expect(
+        service.create(TENANT_ID, dto, ACTOR_ID, 'HR_ADMIN'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(branchesRepository.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('softDelete', () => {
@@ -81,7 +128,12 @@ describe('BranchesService', () => {
       branchesRepository.setActive.mockResolvedValue(deactivated as never);
       auditLogService.log.mockResolvedValue(undefined);
 
-      const result = await service.softDelete(TENANT_ID, BRANCH_ID, ACTOR_ID, 'COMPANY_OWNER');
+      const result = await service.softDelete(
+        TENANT_ID,
+        BRANCH_ID,
+        ACTOR_ID,
+        'COMPANY_OWNER',
+      );
 
       expect(branchesRepository.setActive).toHaveBeenCalledWith(
         BRANCH_ID,
@@ -89,7 +141,10 @@ describe('BranchesService', () => {
         false,
       );
       expect(auditLogService.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'DEACTIVATE_BRANCH', after: { isActive: false } }),
+        expect.objectContaining({
+          action: 'DEACTIVATE_BRANCH',
+          after: { isActive: false },
+        }),
       );
       expect(result).toEqual(deactivated);
     });
@@ -116,7 +171,9 @@ describe('BranchesService', () => {
     it('throws NotFoundException when branch not found', async () => {
       branchesRepository.findById.mockResolvedValue(null);
 
-      await expect(service.getOne(TENANT_ID, BRANCH_ID)).rejects.toThrow(NotFoundException);
+      await expect(service.getOne(TENANT_ID, BRANCH_ID)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -128,7 +185,12 @@ describe('BranchesService', () => {
       branchesRepository.setActive.mockResolvedValue(activated as never);
       auditLogService.log.mockResolvedValue(undefined);
 
-      const result = await service.activate(TENANT_ID, BRANCH_ID, ACTOR_ID, 'HR_ADMIN');
+      const result = await service.activate(
+        TENANT_ID,
+        BRANCH_ID,
+        ACTOR_ID,
+        'HR_ADMIN',
+      );
 
       expect(branchesRepository.setActive).toHaveBeenCalledWith(
         BRANCH_ID,

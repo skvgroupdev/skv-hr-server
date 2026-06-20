@@ -28,16 +28,36 @@ export class PayrollPeriod {
 
   @Prop({
     type: String,
-    enum: ['DRAFT', 'GENERATED', 'APPROVED', 'LOCKED'],
+    // APPROVED and LOCKED are deprecated (kept for backward compat with existing DB docs)
+    // Active workflow: DRAFT → GENERATED → HR_REVIEWED → PAID
+    enum: ['DRAFT', 'GENERATED', 'HR_REVIEWED', 'PAID', 'APPROVED', 'LOCKED'],
     default: 'DRAFT',
   })
-  status: 'DRAFT' | 'GENERATED' | 'APPROVED' | 'LOCKED';
+  status:
+    | 'DRAFT'
+    | 'GENERATED'
+    | 'HR_REVIEWED'
+    | 'PAID'
+    | 'APPROVED' // @deprecated
+    | 'LOCKED'; // @deprecated
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   generatedBy?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   approvedBy?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  hrReviewedBy?: Types.ObjectId;
+
+  @Prop()
+  hrReviewedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  paidBy?: Types.ObjectId;
+
+  @Prop()
+  paidAt?: Date;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   lockedBy?: Types.ObjectId;

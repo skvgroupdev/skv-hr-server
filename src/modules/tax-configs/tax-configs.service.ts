@@ -36,14 +36,35 @@ export class TaxConfigsService {
     return this.taxConfigsRepository.update(id, updateData);
   }
 
+  private async getOrCreateGlobalConfig() {
+    const existing = await this.taxConfigsRepository.findCurrent();
+    if (existing) return existing;
+
+    // Seed default Lao tax config (2024 rates)
+    return this.taxConfigsRepository.create({
+      country: 'LA',
+      year: new Date().getFullYear(),
+      currency: 'LAK',
+      brackets: [
+        { from: 0,          to: 1300000,  rate: 0 },
+        { from: 1300001,    to: 5000000,  rate: 0.05 },
+        { from: 5000001,    to: 15000000, rate: 0.10 },
+        { from: 15000001,   to: 25000000, rate: 0.12 },
+        { from: 25000001,   to: 65000000, rate: 0.15 },
+        { from: 65000001,   to: null,     rate: 0.20 },
+      ],
+      employeeSsRate: 0.055,
+      employerSsRate: 0.06,
+      effectiveFrom: '2024-01-01',
+    });
+  }
+
   // BE-4: auto-create default if tenant has no config
   async getCompanyConfig(tenantId: string) {
     const existing = await this.companyTaxConfigsRepository.findByTenant(tenantId);
     if (existing) return existing;
 
-    const globalConfig = await this.taxConfigsRepository.findCurrent();
-    if (!globalConfig) throw new NotFoundException('No active tax configuration found');
-
+    const globalConfig = await this.getOrCreateGlobalConfig();
     return this.companyTaxConfigsRepository.createDefault(
       tenantId,
       (globalConfig._id as import('mongoose').Types.ObjectId).toString(),
@@ -52,8 +73,7 @@ export class TaxConfigsService {
 
   async upsertCompanyConfig(tenantId: string, dto: UpsertCompanyTaxConfigDto, updatedBy: string) {
     if (!dto.taxConfigId) {
-      const globalConfig = await this.taxConfigsRepository.findCurrent();
-      if (!globalConfig) throw new NotFoundException('No active tax configuration found');
+      const globalConfig = await this.getOrCreateGlobalConfig();
       dto.taxConfigId = (globalConfig._id as import('mongoose').Types.ObjectId).toString();
     }
     return this.companyTaxConfigsRepository.upsertByTenant(tenantId, dto, updatedBy);

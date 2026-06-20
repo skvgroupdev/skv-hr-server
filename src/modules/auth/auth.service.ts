@@ -15,8 +15,17 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UserDocument } from '../users/schemas/user.schema';
-import { MeResponseDto, PositionRefDto, RefDto, WorkScheduleDto } from './dto/me-response.dto';
+import {
+  MeResponseDto,
+  PositionRefDto,
+  RefDto,
+  SubscriptionSummaryDto,
+  WorkScheduleDto,
+} from './dto/me-response.dto';
 import { ShiftDocument } from '../shifts/schemas/shift.schema';
+import { CompaniesRepository } from '../companies/companies.repository';
+import { PlansRepository } from '../plans/plans.repository';
+import type { PlanFeatures } from '../plans/schemas/plan.schema';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -32,6 +41,7 @@ interface UserPayload {
   role: string;
   companyId: string | null;
   branchId: string | null;
+  features?: PlanFeatures;
 }
 
 export interface AuthResult {
@@ -49,9 +59,15 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditLogService: AuditLogService,
+    private readonly companiesRepository: CompaniesRepository,
+    private readonly plansRepository: PlansRepository,
   ) {}
 
-  async login(dto: LoginDto, ipAddress?: string, userAgent?: string): Promise<AuthResult> {
+  async login(
+    dto: LoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<AuthResult> {
     const user = await this.resolveUserForLogin(dto);
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
@@ -83,7 +99,7 @@ export class AuthService {
       userAgent,
     });
 
-    return { ...tokens, user: this.toUserPayload(user) };
+    return { ...tokens, user: await this.toUserPayload(user) };
   }
 
   async refresh(userId: string, rawRefreshToken: string): Promise<AuthResult> {
@@ -92,13 +108,16 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const isTokenValid = await bcrypt.compare(rawRefreshToken, user.refreshToken);
+    const isTokenValid = await bcrypt.compare(
+      rawRefreshToken,
+      user.refreshToken,
+    );
     if (!isTokenValid) {
       throw new UnauthorizedException('Access denied');
     }
 
     const tokens = await this.generateAndStoreTokens(user);
-    return { ...tokens, user: this.toUserPayload(user) };
+    return { ...tokens, user: await this.toUserPayload(user) };
   }
 
   async logout(userId: string): Promise<void> {
@@ -109,13 +128,21 @@ export class AuthService {
     const user = await this.usersRepository.findById(userId);
     if (!user) throw new UnauthorizedException();
 
+    const companyIdStr = user.companyId?.toString();
+    const [features, subscriptionSummary] = await Promise.all([
+      this.getFeatures(companyIdStr),
+      this.getSubscriptionSummary(companyIdStr),
+    ]);
+
     const base: MeResponseDto = {
       id: (user._id as Types.ObjectId).toString(),
       phone: user.phone,
       name: user.name,
       role: user.role,
-      companyId: user.companyId?.toString() ?? null,
+      companyId: companyIdStr ?? null,
       branchId: user.branchId?.toString() ?? null,
+      features,
+      subscriptionSummary,
     };
 
     const employee = await this.employeesRepository.findByUserId(
@@ -135,7 +162,9 @@ export class AuthService {
     return { ...base, ...this.toEmployeeFields(employee), workSchedule };
   }
 
-  private toEmployeeFields(employee: import('../employees/schemas/employee.schema').EmployeeDocument): Partial<MeResponseDto> {
+  private toEmployeeFields(
+    employee: import('../employees/schemas/employee.schema').EmployeeDocument,
+  ): Partial<MeResponseDto> {
     return {
       employeeId: (employee._id as Types.ObjectId).toString(),
       employeeCode: employee.employeeCode,
@@ -156,7 +185,11 @@ export class AuthService {
 
   private toRef(populated: unknown): RefDto | undefined {
     if (!populated || typeof populated !== 'object') return undefined;
-    const doc = populated as { _id?: Types.ObjectId; id?: string; name?: string };
+    const doc = populated as {
+      _id?: Types.ObjectId;
+      id?: string;
+      name?: string;
+    };
     const id = doc._id?.toString() ?? doc.id ?? '';
     return id ? { id, name: doc.name ?? '' } : undefined;
   }
@@ -168,15 +201,14 @@ export class AuthService {
     return { ...ref, banding: doc.banding };
   }
 
-  private toWorkSchedule(shift: ShiftDocument | undefined): WorkScheduleDto | undefined {
+  private toWorkSchedule(
+    shift: ShiftDocument | undefined,
+  ): WorkScheduleDto | undefined {
     if (!shift?.startTime || !shift?.endTime) return undefined;
     return { startTime: shift.startTime, endTime: shift.endTime };
   }
 
-  async changePassword(
-    userId: string,
-    dto: ChangePasswordDto,
-  ): Promise<void> {
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
     const user = await this.usersRepository.findByIdWithSensitive(userId);
     if (!user) throw new UnauthorizedException();
 
@@ -214,12 +246,17 @@ export class AuthService {
       }
 
       // Multiple companies — must provide companyCode
-      throw new BadRequestException('Phone exists in multiple companies, please provide companyCode');
+      throw new BadRequestException(
+        'Phone exists in multiple companies, please provide companyCode',
+      );
     }
 
     // companyCode provided — treat as companyId directly for now
     const companyId = new Types.ObjectId(dto.companyCode);
-    const user = await this.usersRepository.findByPhoneAndCompany(dto.phone, companyId);
+    const user = await this.usersRepository.findByPhoneAndCompany(
+      dto.phone,
+      companyId,
+    );
     if (!user) throw new UnauthorizedException('Invalid credentials');
     return user;
   }
@@ -232,18 +269,28 @@ export class AuthService {
       branchId: user.branchId?.toString() ?? null,
     };
 
-    const accessExpiresIn = this.configService.get<string>('jwt.accessExpiresIn') ?? '15m';
-    const refreshExpiresIn = this.configService.get<string>('jwt.refreshExpiresIn') ?? '7d';
+    const accessExpiresIn =
+      this.configService.get<string>('jwt.accessExpiresIn') ?? '15m';
+    const refreshExpiresIn =
+      this.configService.get<string>('jwt.refreshExpiresIn') ?? '7d';
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('jwt.accessSecret'),
         // cast needed: @nestjs/jwt v11 expiresIn is StringValue but config returns string
-        expiresIn: accessExpiresIn as Parameters<typeof this.jwtService.signAsync>[1] extends { expiresIn?: infer E } ? E : never,
+        expiresIn: accessExpiresIn as Parameters<
+          typeof this.jwtService.signAsync
+        >[1] extends { expiresIn?: infer E }
+          ? E
+          : never,
       }),
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('jwt.refreshSecret'),
-        expiresIn: refreshExpiresIn as Parameters<typeof this.jwtService.signAsync>[1] extends { expiresIn?: infer E } ? E : never,
+        expiresIn: refreshExpiresIn as Parameters<
+          typeof this.jwtService.signAsync
+        >[1] extends { expiresIn?: infer E }
+          ? E
+          : never,
       }),
     ]);
 
@@ -256,7 +303,7 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private toUserPayload(user: UserDocument): UserPayload {
+  private async toUserPayload(user: UserDocument): Promise<UserPayload> {
     return {
       id: (user._id as Types.ObjectId).toString(),
       phone: user.phone,
@@ -264,6 +311,34 @@ export class AuthService {
       role: user.role,
       companyId: user.companyId?.toString() ?? null,
       branchId: user.branchId?.toString() ?? null,
+      features: await this.getFeatures(user.companyId?.toString()),
+    };
+  }
+
+  private async getFeatures(
+    companyId?: string,
+  ): Promise<PlanFeatures | undefined> {
+    if (!companyId) return undefined;
+    const company = await this.companiesRepository.findById(companyId);
+    if (!company?.planId) return undefined;
+    const plan = await this.plansRepository.findById(company.planId.toString());
+    return plan?.features;
+  }
+
+  private async getSubscriptionSummary(
+    companyId?: string,
+  ): Promise<SubscriptionSummaryDto | undefined> {
+    if (!companyId) return undefined;
+    const company = await this.companiesRepository.findById(companyId);
+    if (!company?.planId) return undefined;
+    const plan = await this.plansRepository.findById(company.planId.toString());
+    if (!plan) return undefined;
+    return {
+      planId: company.planId.toString(),
+      planName: plan.name,
+      status: company.subscription?.status ?? 'TRIAL',
+      endDate: company.subscription?.endDate?.toISOString() ?? null,
+      isPaid: company.subscription?.isPaid ?? false,
     };
   }
 }

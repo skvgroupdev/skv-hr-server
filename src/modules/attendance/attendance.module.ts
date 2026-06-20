@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AttendanceLog, AttendanceLogSchema } from './schemas/attendance-log.schema';
+import {
+  AttendanceLog,
+  AttendanceLogSchema,
+} from './schemas/attendance-log.schema';
 import { AttendanceRepository } from './attendance.repository';
 import { AttendanceService } from './attendance.service';
 import { AttendanceController } from './attendance.controller';
@@ -10,15 +13,19 @@ import { EmployeesModule } from '../employees/employees.module';
 import { BranchesModule } from '../branches/branches.module';
 import { ShiftsModule } from '../shifts/shifts.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CompanyPoliciesModule } from '../company-policies/company-policies.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: AttendanceLog.name, schema: AttendanceLogSchema }]),
+    MongooseModule.forFeature([
+      { name: AttendanceLog.name, schema: AttendanceLogSchema },
+    ]),
     AuditLogModule,
     EmployeesModule,
     BranchesModule,
     ShiftsModule,
     NotificationsModule,
+    CompanyPoliciesModule,
   ],
   providers: [AttendanceRepository, AttendanceService, GeofenceService],
   controllers: [AttendanceController],

@@ -15,6 +15,11 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CreateOwnerDto } from './dto/create-owner.dto';
 import { CompanyQueryDto } from './dto/company-query.dto';
+import { AssignPlanDto } from './dto/assign-plan.dto';
+import {
+  ExtendSubscriptionDto,
+  UpdateSubscriptionDto,
+} from './dto/update-subscription.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -81,7 +86,7 @@ export class CompaniesController {
   @HttpCode(HttpStatus.OK)
   async assignPlan(
     @Param('id') id: string,
-    @Body() body: { planId: string; startDate: string; endDate: string; isPaid?: boolean },
+    @Body() body: AssignPlanDto,
     @CurrentUser() user: JwtPayload,
   ) {
     const company = await this.companiesService.assignPlan(
@@ -90,6 +95,35 @@ export class CompaniesController {
       body.startDate,
       body.endDate,
       body.isPaid ?? false,
+      user.sub,
+    );
+    return { data: company };
+  }
+
+  @Patch(':id/subscription')
+  async updateSubscription(
+    @Param('id') id: string,
+    @Body() body: UpdateSubscriptionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const company = await this.companiesService.updateSubscription(
+      id,
+      body,
+      user.sub,
+    );
+    return { data: company };
+  }
+
+  @Post(':id/subscription/extend')
+  @HttpCode(HttpStatus.OK)
+  async extendSubscription(
+    @Param('id') id: string,
+    @Body() body: ExtendSubscriptionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const company = await this.companiesService.extendSubscription(
+      id,
+      body,
       user.sub,
     );
     return { data: company };

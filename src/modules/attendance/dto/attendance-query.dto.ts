@@ -1,4 +1,4 @@
-import { IsOptional, IsDateString, IsNumberString, IsString } from 'class-validator';
+import { IsOptional, IsDateString, IsNumberString, IsString, IsNotEmpty } from 'class-validator';
 
 export class AttendanceHistoryQueryDto {
   @IsOptional()
@@ -46,4 +46,14 @@ export class AttendanceReportQueryDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+}
+
+export class EmployeeMonthlyReportQueryDto {
+  @IsNotEmpty()
+  @IsNumberString()
+  year!: string;
+
+  @IsNotEmpty()
+  @IsNumberString()
+  month!: string;
 }

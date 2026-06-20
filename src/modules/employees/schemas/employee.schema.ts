@@ -39,6 +39,15 @@ export class Employee {
   @Prop({ required: true, trim: true })
   lastName: string;
 
+  @Prop({ trim: true })
+  firstNameEn?: string;
+
+  @Prop({ trim: true })
+  lastNameEn?: string;
+
+  @Prop({ trim: true })
+  nickname?: string;
+
   @Prop({ type: String, enum: ['MALE', 'FEMALE', 'OTHER'] })
   gender?: Gender;
 
@@ -75,7 +84,10 @@ export class Employee {
   } | null;
 
   // Employment
-  @Prop({ type: String, enum: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'] })
+  @Prop({
+    type: String,
+    enum: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'],
+  })
   employmentType?: EmploymentType;
 
   @Prop()
@@ -89,7 +101,14 @@ export class Employee {
 
   @Prop({
     type: String,
-    enum: ['ACTIVE', 'INACTIVE', 'PROBATION', 'RESIGNED', 'SUSPENDED', 'TERMINATED'],
+    enum: [
+      'ACTIVE',
+      'INACTIVE',
+      'PROBATION',
+      'RESIGNED',
+      'SUSPENDED',
+      'TERMINATED',
+    ],
     default: 'ACTIVE',
   })
   status: EmployeeStatus;

@@ -9,6 +9,7 @@ import { EmployeesRepository } from '../../employees/employees.repository';
 import { BranchesRepository } from '../../branches/branches.repository';
 import { ShiftsRepository } from '../../shifts/shifts.repository';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { CompanyPoliciesService } from '../../company-policies/company-policies.service';
 
 // Pre-generate IDs outside tests so Date.now isn't mocked when creating them
 const TENANT_ID = new Types.ObjectId().toHexString();
@@ -75,6 +76,10 @@ describe('AttendanceService', () => {
     notify: jest.fn(),
   };
 
+  const mockCompanyPoliciesService = {
+    getEffectivePolicy: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -86,11 +91,18 @@ describe('AttendanceService', () => {
         { provide: BranchesRepository, useValue: mockBranchesRepository },
         { provide: ShiftsRepository, useValue: mockShiftsRepository },
         { provide: NotificationsService, useValue: mockNotificationsService },
+        {
+          provide: CompanyPoliciesService,
+          useValue: mockCompanyPoliciesService,
+        },
       ],
     }).compile();
 
     service = module.get<AttendanceService>(AttendanceService);
     jest.clearAllMocks();
+    mockCompanyPoliciesService.getEffectivePolicy.mockResolvedValue({
+      workScheduleMode: 'SHIFT_BASED',
+    });
   });
 
   describe('checkIn', () => {
@@ -102,7 +114,11 @@ describe('AttendanceService', () => {
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(500); // 500m > 100m radius
 
-      const result = await service.checkIn(TENANT_ID, USER_ID, { lat: 17.98, lng: 102.64, gpsAccuracy: 5 });
+      const result = await service.checkIn(TENANT_ID, USER_ID, {
+        lat: 17.98,
+        lng: 102.64,
+        gpsAccuracy: 5,
+      });
 
       expect(result).toMatchObject({ blocked: true });
       expect(result.distanceFromBranch).toBeGreaterThan(0);
@@ -112,7 +128,11 @@ describe('AttendanceService', () => {
     it('should create check-in log when employee is inside geofence', async () => {
       const employee = makeMockEmployee(new Types.ObjectId());
       const branch = makeMockBranch(17.97, 102.63, 200);
-      const mockLog = { _id: new Types.ObjectId(), type: 'CHECK_IN', status: 'NORMAL' };
+      const mockLog = {
+        _id: new Types.ObjectId(),
+        type: 'CHECK_IN',
+        status: 'NORMAL',
+      };
 
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
       mockBranchesRepository.findById.mockResolvedValue(branch);
@@ -121,7 +141,11 @@ describe('AttendanceService', () => {
       mockShiftsRepository.findCurrentAssignment.mockResolvedValue(null);
       mockAttendanceRepository.create.mockResolvedValue(mockLog);
 
-      const result = await service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63, gpsAccuracy: 5 });
+      const result = await service.checkIn(TENANT_ID, USER_ID, {
+        lat: 17.97,
+        lng: 102.63,
+        gpsAccuracy: 5,
+      });
 
       expect(result).toEqual(mockLog);
       expect(mockAttendanceRepository.create).toHaveBeenCalledTimes(1);
@@ -155,9 +179,12 @@ describe('AttendanceService', () => {
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
       mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(null);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { startTime: '08:00' } });
-      mockAttendanceRepository.create.mockImplementation((data) => Promise.resolve(data));
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: { startTime: '08:00', workDays: [0, 1, 2, 3, 4, 5, 6] },
+      });
+      mockAttendanceRepository.create.mockImplementation((data) =>
+        Promise.resolve(data),
+      );
 
       await service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
 
@@ -188,9 +215,12 @@ describe('AttendanceService', () => {
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
       mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(null);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { startTime: '08:00' } });
-      mockAttendanceRepository.create.mockImplementation((data) => Promise.resolve(data));
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: { startTime: '08:00', workDays: [0, 1, 2, 3, 4, 5, 6] },
+      });
+      mockAttendanceRepository.create.mockImplementation((data) =>
+        Promise.resolve(data),
+      );
 
       await service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
 
@@ -213,9 +243,12 @@ describe('AttendanceService', () => {
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
       mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(null);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { startTime: '08:00' } });
-      mockAttendanceRepository.create.mockImplementation((data) => Promise.resolve(data));
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: { startTime: '08:00', workDays: [0, 1, 2, 3, 4, 5, 6] },
+      });
+      mockAttendanceRepository.create.mockImplementation((data) =>
+        Promise.resolve(data),
+      );
 
       await service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
 
@@ -241,9 +274,16 @@ describe('AttendanceService', () => {
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
       mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(null);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { startTime: '09:00', gracePeriodMinutes: 15 } });
-      mockAttendanceRepository.create.mockImplementation((data) => Promise.resolve(data));
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: {
+          startTime: '09:00',
+          gracePeriodMinutes: 15,
+          workDays: [0, 1, 2, 3, 4, 5, 6],
+        },
+      });
+      mockAttendanceRepository.create.mockImplementation((data) =>
+        Promise.resolve(data),
+      );
 
       await service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
 
@@ -257,18 +297,26 @@ describe('AttendanceService', () => {
     it('should return NORMAL when shift population fails (shiftId is raw ObjectId)', async () => {
       const employee = makeMockEmployee(new Types.ObjectId());
       const branch = makeMockBranch();
-      const mockLog = { _id: new Types.ObjectId(), type: 'CHECK_IN', status: 'NORMAL' };
+      const mockLog = {
+        _id: new Types.ObjectId(),
+        type: 'CHECK_IN',
+        status: 'NORMAL',
+      };
 
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
       mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(null);
       // Simulate unpopulated shiftId (shift was deleted — Mongoose returns raw ObjectId)
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: new Types.ObjectId() });
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: new Types.ObjectId(),
+      });
       mockAttendanceRepository.create.mockResolvedValue(mockLog);
 
-      const result = await service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
+      const result = await service.checkIn(TENANT_ID, USER_ID, {
+        lat: 17.97,
+        lng: 102.63,
+      });
 
       expect(result).toEqual(mockLog);
       const createCall = mockAttendanceRepository.create.mock.calls[0][0];
@@ -288,8 +336,9 @@ describe('AttendanceService', () => {
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
       mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(null);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { startTime: '08:00' } });
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: { startTime: '08:00', workDays: [0, 1, 2, 3, 4, 5, 6] },
+      });
 
       await expect(
         service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 }),
@@ -301,7 +350,11 @@ describe('AttendanceService', () => {
     it('should allow check-in exactly when 2h window opens', async () => {
       const employee = makeMockEmployee(new Types.ObjectId());
       const branch = makeMockBranch();
-      const mockLog = { _id: new Types.ObjectId(), type: 'CHECK_IN', status: 'NORMAL' };
+      const mockLog = {
+        _id: new Types.ObjectId(),
+        type: 'CHECK_IN',
+        status: 'NORMAL',
+      };
 
       // shift 08:00, window opens at 06:00; check-in at 06:00 → allowed
       const windowOpenDate = new Date();
@@ -312,11 +365,15 @@ describe('AttendanceService', () => {
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
       mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(null);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { startTime: '08:00' } });
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: { startTime: '08:00', workDays: [0, 1, 2, 3, 4, 5, 6] },
+      });
       mockAttendanceRepository.create.mockResolvedValue(mockLog);
 
-      const result = await service.checkIn(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
+      const result = await service.checkIn(TENANT_ID, USER_ID, {
+        lat: 17.97,
+        lng: 102.63,
+      });
 
       jest.useRealTimers();
 
@@ -332,13 +389,27 @@ describe('AttendanceService', () => {
 
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
       mockAttendanceRepository.findDailyPaginated.mockResolvedValue({
-        days: [{
-          _id: '2026-06-01',
-          logs: [
-            { type: 'CHECK_IN', checkTime: checkInTime, status: 'LATE', lateMinutes: 10, isInsideGeofence: true, distanceFromBranch: 45 },
-            { type: 'CHECK_OUT', checkTime: checkOutTime, status: 'NORMAL', lateMinutes: 0 },
-          ],
-        }],
+        days: [
+          {
+            _id: '2026-06-01',
+            logs: [
+              {
+                type: 'CHECK_IN',
+                checkTime: checkInTime,
+                status: 'LATE',
+                lateMinutes: 10,
+                isInsideGeofence: true,
+                distanceFromBranch: 45,
+              },
+              {
+                type: 'CHECK_OUT',
+                checkTime: checkOutTime,
+                status: 'NORMAL',
+                lateMinutes: 0,
+              },
+            ],
+          },
+        ],
         total: 1,
       });
 
@@ -362,12 +433,21 @@ describe('AttendanceService', () => {
 
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
       mockAttendanceRepository.findDailyPaginated.mockResolvedValue({
-        days: [{
-          _id: '2026-06-01',
-          logs: [
-            { type: 'CHECK_IN', checkTime: checkInTime, status: 'NORMAL', lateMinutes: 0, isInsideGeofence: true, distanceFromBranch: 20 },
-          ],
-        }],
+        days: [
+          {
+            _id: '2026-06-01',
+            logs: [
+              {
+                type: 'CHECK_IN',
+                checkTime: checkInTime,
+                status: 'NORMAL',
+                lateMinutes: 0,
+                isInsideGeofence: true,
+                distanceFromBranch: 20,
+              },
+            ],
+          },
+        ],
         total: 1,
       });
 
@@ -380,11 +460,22 @@ describe('AttendanceService', () => {
     it('should return correct meta pagination', async () => {
       const employee = makeMockEmployee();
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
-      mockAttendanceRepository.findDailyPaginated.mockResolvedValue({ days: [], total: 45 });
+      mockAttendanceRepository.findDailyPaginated.mockResolvedValue({
+        days: [],
+        total: 45,
+      });
 
-      const result = await service.getMyHistory(TENANT_ID, USER_ID, { page: '3', limit: '20' });
+      const result = await service.getMyHistory(TENANT_ID, USER_ID, {
+        page: '3',
+        limit: '20',
+      });
 
-      expect(result.meta).toEqual({ page: 3, limit: 20, total: 45, totalPages: 3 });
+      expect(result.meta).toEqual({
+        page: 3,
+        limit: 20,
+        total: 45,
+        totalPages: 3,
+      });
     });
   });
 
@@ -403,16 +494,25 @@ describe('AttendanceService', () => {
       const employee = makeMockEmployee(new Types.ObjectId());
       const branch = makeMockBranch();
       const existingCheckIn = { _id: new Types.ObjectId(), type: 'CHECK_IN' };
-      const mockLog = { _id: new Types.ObjectId(), type: 'CHECK_OUT', status: 'NORMAL' };
+      const mockLog = {
+        _id: new Types.ObjectId(),
+        type: 'CHECK_OUT',
+        status: 'NORMAL',
+      };
 
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
-      mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(existingCheckIn);
+      mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(
+        existingCheckIn,
+      );
       mockShiftsRepository.findCurrentAssignment.mockResolvedValue(null);
       mockAttendanceRepository.create.mockResolvedValue(mockLog);
 
-      const result = await service.checkOut(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
+      const result = await service.checkOut(TENANT_ID, USER_ID, {
+        lat: 17.97,
+        lng: 102.63,
+      });
 
       expect(result).toEqual(mockLog);
       expect(mockAttendanceRepository.create).toHaveBeenCalledTimes(1);
@@ -431,9 +531,12 @@ describe('AttendanceService', () => {
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
-      mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(existingCheckIn);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { endTime: '17:00', isOvernight: false } });
+      mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(
+        existingCheckIn,
+      );
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: { endTime: '17:00', isOvernight: false },
+      });
 
       await expect(
         service.checkOut(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 }),
@@ -446,7 +549,11 @@ describe('AttendanceService', () => {
       const employee = makeMockEmployee(new Types.ObjectId());
       const branch = makeMockBranch();
       const existingCheckIn = { _id: new Types.ObjectId(), type: 'CHECK_IN' };
-      const mockLog = { _id: new Types.ObjectId(), type: 'CHECK_OUT', status: 'NORMAL' };
+      const mockLog = {
+        _id: new Types.ObjectId(),
+        type: 'CHECK_OUT',
+        status: 'NORMAL',
+      };
 
       // overnight shift: endTime 06:00, current time 05:00 → allowed because isOvernight
       const earlyDate = new Date();
@@ -456,12 +563,18 @@ describe('AttendanceService', () => {
       mockEmployeesRepository.findByUserIdAndTenant.mockResolvedValue(employee);
       mockBranchesRepository.findById.mockResolvedValue(branch);
       mockGeofenceService.calculateDistance.mockReturnValue(50);
-      mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(existingCheckIn);
-      mockShiftsRepository.findCurrentAssignment
-        .mockResolvedValue({ shiftId: { endTime: '06:00', isOvernight: true } });
+      mockAttendanceRepository.findTodayCheckIn.mockResolvedValue(
+        existingCheckIn,
+      );
+      mockShiftsRepository.findCurrentAssignment.mockResolvedValue({
+        shiftId: { endTime: '06:00', isOvernight: true },
+      });
       mockAttendanceRepository.create.mockResolvedValue(mockLog);
 
-      const result = await service.checkOut(TENANT_ID, USER_ID, { lat: 17.97, lng: 102.63 });
+      const result = await service.checkOut(TENANT_ID, USER_ID, {
+        lat: 17.97,
+        lng: 102.63,
+      });
 
       jest.useRealTimers();
 

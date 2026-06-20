@@ -3,6 +3,16 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type PayslipDocument = HydratedDocument<Payslip>;
 
+export interface PayrollAdjustment {
+  kind: 'ADDITION' | 'DEDUCTION';
+  name: string;
+  amount: number;
+  reason: string;
+  source: 'SYSTEM' | 'MANUAL' | 'PREVIOUS_PERIOD_CORRECTION';
+  createdBy?: Types.ObjectId;
+  createdAt: Date;
+}
+
 @Schema({
   timestamps: { createdAt: true, updatedAt: false },
   versionKey: false,
@@ -71,12 +81,43 @@ export class Payslip {
   @Prop({ default: 0 })
   leaveDeductionAmount: number;
 
+  @Prop({ default: 0 })
+  approvedRestDays: number;
+
+  @Prop({ default: 0 })
+  unusedRestDays: number;
+
+  @Prop({ default: 0 })
+  restDayCompensationAmount: number;
+
+  @Prop({ type: Object })
+  payrollPolicySnapshot?: Record<string, unknown>;
+
+  @Prop({
+    type: [
+      {
+        kind: { type: String, enum: ['ADDITION', 'DEDUCTION'] },
+        name: String,
+        amount: Number,
+        reason: String,
+        source: {
+          type: String,
+          enum: ['SYSTEM', 'MANUAL', 'PREVIOUS_PERIOD_CORRECTION'],
+        },
+        createdBy: { type: Types.ObjectId, ref: 'User' },
+        createdAt: Date,
+      },
+    ],
+    default: [],
+  })
+  adjustments: PayrollAdjustment[];
+
   @Prop({
     type: String,
-    enum: ['DRAFT', 'APPROVED', 'PAID'],
+    enum: ['DRAFT', 'HR_REVIEWED', 'PAID', 'APPROVED'],
     default: 'DRAFT',
   })
-  status: 'DRAFT' | 'APPROVED' | 'PAID';
+  status: 'DRAFT' | 'HR_REVIEWED' | 'PAID' | 'APPROVED';
 }
 
 export const PayslipSchema = SchemaFactory.createForClass(Payslip);

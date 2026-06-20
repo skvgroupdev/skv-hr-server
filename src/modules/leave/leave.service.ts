@@ -9,7 +9,10 @@ import { Types } from 'mongoose';
 import { LeaveRepository } from './leave.repository';
 import { EmployeesRepository } from '../employees/employees.repository';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { NotificationType } from '../notifications/schemas/notification.schema';
+import { UsersRepository } from '../users/users.repository';
+import { UserRole } from '../users/schemas/user.schema';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ApproveLeaveDto, RejectLeaveDto } from './dto/approve-leave.dto';
@@ -19,15 +22,9 @@ import { LeaveRequestDocument } from './schemas/leave-request.schema';
 
 const MAX_LIMIT = 100;
 
-function countWorkingDays(startDate: Date, endDate: Date): number {
-  let count = 0;
-  const current = new Date(startDate);
-  while (current <= endDate) {
-    const day = current.getDay();
-    if (day !== 0 && day !== 6) count++;
-    current.setDate(current.getDate() + 1);
-  }
-  return count;
+function countLeaveDays(startDate: Date, endDate: Date): number {
+  const msPerDay = 1000 * 60 * 60 * 24;
+  return Math.floor((endDate.getTime() - startDate.getTime()) / msPerDay) + 1;
 }
 
 @Injectable()
@@ -36,6 +33,8 @@ export class LeaveService {
     private readonly leaveRepository: LeaveRepository,
     private readonly employeesRepository: EmployeesRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly notificationsGateway: NotificationsGateway,
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   // Leave Types
@@ -86,9 +85,9 @@ export class LeaveService {
     );
     if (overlapping) throw new ConflictException('Leave request overlaps with existing request');
 
-    const totalDays = dto.isHalfDay ? 0.5 : countWorkingDays(startDate, endDate);
+    const totalDays = dto.isHalfDay ? 0.5 : countLeaveDays(startDate, endDate);
 
-    return this.leaveRepository.createRequest({
+    const leaveRequest = await this.leaveRepository.createRequest({
       tenantId: tenantObjectId,
       employeeId: employee._id as Types.ObjectId,
       ...(dto.leaveTypeId && { leaveTypeId: new Types.ObjectId(dto.leaveTypeId) }),
@@ -101,6 +100,12 @@ export class LeaveService {
       reason: dto.reason,
       attachmentUrls: dto.attachmentUrls ?? [],
     });
+
+    const leaveRequestId = (leaveRequest._id as Types.ObjectId).toString();
+    const employeeName = `${employee.firstName} ${employee.lastName}`;
+    await this.notifyManagersOnNewRequest(tenantObjectId, employee, employeeName, leaveRequestId);
+
+    return leaveRequest;
   }
 
   async getMy(tenantId: string, userId: string, query: LeaveQueryDto) {
@@ -162,10 +167,17 @@ export class LeaveService {
     }
 
     await this.notifyEmployee(request.employeeId, tenantObjectId, {
-      title: 'ຄຳຮ້ອງລາພັກໄດ້ຮັບການອນຸມັດ',
-      body: dto.comment ? `ໝາຍເຫດ: ${dto.comment}` : 'ຄຳຮ້ອງລາພັກຂອງທ່ານໄດ້ຮັບການອນຸມັດແລ້ວ',
+      title: 'ຄຳຮ້ອງລາພັກໄດ້ຮັບການອະນຸມັດ',
+      body: dto.comment ? `ໝາຍເຫດ: ${dto.comment}` : 'ຄຳຮ້ອງລາພັກຂອງທ່ານໄດ້ຮັບການອະນຸມັດແລ້ວ',
       type: 'LEAVE_APPROVED' as NotificationType,
       data: { leaveRequestId: id },
+    });
+
+    await this.emitStatusChangedToEmployee(request.employeeId, tenantObjectId, {
+      leaveRequestId: id,
+      status: 'APPROVED',
+      approverName: actorId,
+      comment: dto.comment,
     });
 
     return updatedRequest;
@@ -196,6 +208,12 @@ export class LeaveService {
       body: dto.reason ?? 'ຄຳຮ້ອງລາພັກຂອງທ່ານຖືກປະຕິເສດ',
       type: 'LEAVE_REJECTED' as NotificationType,
       data: { leaveRequestId: id },
+    });
+
+    await this.emitStatusChangedToEmployee(request.employeeId, tenantObjectId, {
+      leaveRequestId: id,
+      status: 'REJECTED',
+      reason: dto.reason,
     });
 
     return updatedRequest;
@@ -258,6 +276,85 @@ export class LeaveService {
       year,
       dto.adjustment,
     );
+  }
+
+  private async notifyManagersOnNewRequest(
+    tenantId: Types.ObjectId,
+    employee: Awaited<ReturnType<typeof this.findEmployeeByUserId>>,
+    employeeName: string,
+    leaveRequestId: string,
+  ): Promise<void> {
+    const notifyPayload = {
+      type: 'LEAVE_REQUEST' as NotificationType,
+      message: `ພະນັກງານ ${employeeName} ຂໍລາພັກ`,
+      leaveRequestId,
+    };
+
+    // Notify HR_ADMIN and COMPANY_OWNER
+    const managers = await this.usersRepository.findByRolesAndTenant(tenantId, [
+      'HR_ADMIN' as UserRole,
+      'COMPANY_OWNER' as UserRole,
+    ]);
+    for (const manager of managers) {
+      const managerId = (manager._id as Types.ObjectId).toString();
+      this.notificationsGateway.sendToUser(managerId, 'notification:new', notifyPayload);
+    }
+
+    // Notify BRANCH_MANAGER of employee's branch
+    if (employee.branchId) {
+      await this.notifyBranchManager(tenantId, employee.branchId, notifyPayload);
+    }
+
+    // Notify SUPERVISOR directly linked to employee
+    if (employee.supervisorId) {
+      const supervisor = await this.employeesRepository.findById(
+        employee.supervisorId.toString(),
+        tenantId,
+      );
+      if (supervisor?.userId) {
+        this.notificationsGateway.sendToUser(
+          supervisor.userId.toString(),
+          'notification:new',
+          notifyPayload,
+        );
+      }
+    }
+  }
+
+  private async notifyBranchManager(
+    tenantId: Types.ObjectId,
+    branchId: Types.ObjectId,
+    payload: unknown,
+  ): Promise<void> {
+    const branchManagers = await this.usersRepository.findByRolesAndTenant(tenantId, [
+      'BRANCH_MANAGER' as UserRole,
+    ]);
+    // Find manager whose branchId matches — stored on User document
+    for (const user of branchManagers) {
+      const userBranchId = (user as unknown as Record<string, unknown>).branchId;
+      if (userBranchId && userBranchId.toString() === branchId.toString()) {
+        this.notificationsGateway.sendToUser(
+          (user._id as Types.ObjectId).toString(),
+          'notification:new',
+          payload,
+        );
+      }
+    }
+  }
+
+  private async emitStatusChangedToEmployee(
+    employeeId: Types.ObjectId,
+    tenantId: Types.ObjectId,
+    payload: unknown,
+  ): Promise<void> {
+    const employee = await this.employeesRepository.findById(employeeId.toString(), tenantId);
+    if (employee?.userId) {
+      this.notificationsGateway.sendToUser(
+        employee.userId.toString(),
+        'leave:status_changed',
+        payload,
+      );
+    }
   }
 
   private async notifyEmployee(

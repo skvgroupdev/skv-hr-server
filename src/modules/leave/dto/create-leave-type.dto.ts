@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  IsEnum,
+  Min,
+} from 'class-validator';
 
 export class CreateLeaveTypeDto {
   @IsString()
@@ -15,6 +22,10 @@ export class CreateLeaveTypeDto {
   @IsOptional()
   @IsBoolean()
   isPaid?: boolean;
+
+  @IsOptional()
+  @IsEnum(['LEAVE', 'REST_DAY'])
+  category?: 'LEAVE' | 'REST_DAY';
 
   @IsOptional()
   @IsBoolean()

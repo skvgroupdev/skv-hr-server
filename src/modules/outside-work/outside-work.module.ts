@@ -7,6 +7,7 @@ import { OutsideWorkController } from './outside-work.controller';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AttendanceModule,
     EmployeesModule,
     NotificationsModule,
+    UsersModule,
   ],
   providers: [OutsideWorkRepository, OutsideWorkService],
   controllers: [OutsideWorkController],

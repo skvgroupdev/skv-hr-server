@@ -9,6 +9,10 @@ import { TaxConfigsService } from '../../tax-configs/tax-configs.service';
 import { CompanyTaxConfigsRepository } from '../../tax-configs/company-tax-configs.repository';
 import { EmployeesRepository } from '../../employees/employees.repository';
 import { OTRepository } from '../../ot/ot.repository';
+import { LeaveRepository } from '../../leave/leave.repository';
+import { CompanyPoliciesService } from '../../company-policies/company-policies.service';
+import { ShiftsRepository } from '../../shifts/shifts.repository';
+import { AttendanceRepository } from '../../attendance/attendance.repository';
 
 const makeId = () => new Types.ObjectId();
 
@@ -75,6 +79,22 @@ describe('PayrollService', () => {
     findApprovedInDateRange: jest.fn(),
   };
 
+  const mockLeaveRepository = {
+    findApprovedInDateRange: jest.fn(),
+  };
+
+  const mockCompanyPoliciesService = {
+    getEffectivePolicy: jest.fn(),
+  };
+
+  const mockShiftsRepository = {
+    findAssignmentsForRange: jest.fn(),
+  };
+
+  const mockAttendanceRepository = {
+    countPresenceDaysByEmployee: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -83,9 +103,19 @@ describe('PayrollService', () => {
         { provide: TaxCalculationService, useValue: mockTaxCalculationService },
         { provide: TaxConfigsRepository, useValue: mockTaxConfigsRepository },
         { provide: TaxConfigsService, useValue: mockTaxConfigsService },
-        { provide: CompanyTaxConfigsRepository, useValue: mockCompanyTaxConfigsRepository },
+        {
+          provide: CompanyTaxConfigsRepository,
+          useValue: mockCompanyTaxConfigsRepository,
+        },
         { provide: EmployeesRepository, useValue: mockEmployeesRepository },
         { provide: OTRepository, useValue: mockOTRepository },
+        { provide: LeaveRepository, useValue: mockLeaveRepository },
+        {
+          provide: CompanyPoliciesService,
+          useValue: mockCompanyPoliciesService,
+        },
+        { provide: ShiftsRepository, useValue: mockShiftsRepository },
+        { provide: AttendanceRepository, useValue: mockAttendanceRepository },
       ],
     }).compile();
 
@@ -98,13 +128,26 @@ describe('PayrollService', () => {
 
     it('should return paginated payslips without filters', async () => {
       const payslips = [makePayslip(), makePayslip()];
-      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({ data: payslips, total: 2 });
+      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({
+        data: payslips,
+        total: 2,
+      });
 
-      const result = await service.getAllPayslips(tenantId, { page: 1, limit: 20 });
+      const result = await service.getAllPayslips(tenantId, {
+        page: 1,
+        limit: 20,
+      });
 
       expect(result.data).toHaveLength(2);
-      expect(result.meta).toEqual({ page: 1, limit: 20, total: 2, totalPages: 1 });
-      expect(mockPayrollRepository.findAllPayslipsPaginated).toHaveBeenCalledWith(
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 2,
+        totalPages: 1,
+      });
+      expect(
+        mockPayrollRepository.findAllPayslipsPaginated,
+      ).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         expect.objectContaining({ employeeIds: undefined }),
         1,
@@ -116,11 +159,19 @@ describe('PayrollService', () => {
     it('should apply periodId and status filters', async () => {
       const periodId = makeId().toString();
       const payslips = [makePayslip({ status: 'APPROVED' })];
-      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({ data: payslips, total: 1 });
+      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({
+        data: payslips,
+        total: 1,
+      });
 
-      const result = await service.getAllPayslips(tenantId, { periodId, status: 'APPROVED' });
+      const result = await service.getAllPayslips(tenantId, {
+        periodId,
+        status: 'APPROVED',
+      });
 
-      expect(mockPayrollRepository.findAllPayslipsPaginated).toHaveBeenCalledWith(
+      expect(
+        mockPayrollRepository.findAllPayslipsPaginated,
+      ).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         expect.objectContaining({ periodId, status: 'APPROVED' }),
         expect.any(Number),
@@ -136,7 +187,10 @@ describe('PayrollService', () => {
         employees: [{ _id: employeeId }],
         total: 1,
       });
-      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({ data: [], total: 0 });
+      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({
+        data: [],
+        total: 0,
+      });
 
       await service.getAllPayslips(tenantId, { search: 'John' });
 
@@ -146,7 +200,9 @@ describe('PayrollService', () => {
         100,
         '-createdAt',
       );
-      expect(mockPayrollRepository.findAllPayslipsPaginated).toHaveBeenCalledWith(
+      expect(
+        mockPayrollRepository.findAllPayslipsPaginated,
+      ).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         expect.objectContaining({ employeeIds: [employeeId] }),
         expect.any(Number),
@@ -156,21 +212,33 @@ describe('PayrollService', () => {
     });
 
     it('should return empty result immediately when search matches no employees', async () => {
-      mockEmployeesRepository.findPaginated.mockResolvedValue({ employees: [], total: 0 });
+      mockEmployeesRepository.findPaginated.mockResolvedValue({
+        employees: [],
+        total: 0,
+      });
 
-      const result = await service.getAllPayslips(tenantId, { search: 'nobody' });
+      const result = await service.getAllPayslips(tenantId, {
+        search: 'nobody',
+      });
 
       expect(result.data).toHaveLength(0);
       expect(result.meta.total).toBe(0);
-      expect(mockPayrollRepository.findAllPayslipsPaginated).not.toHaveBeenCalled();
+      expect(
+        mockPayrollRepository.findAllPayslipsPaginated,
+      ).not.toHaveBeenCalled();
     });
 
     it('should cap limit at 100', async () => {
-      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({ data: [], total: 0 });
+      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({
+        data: [],
+        total: 0,
+      });
 
       await service.getAllPayslips(tenantId, { limit: 999 });
 
-      expect(mockPayrollRepository.findAllPayslipsPaginated).toHaveBeenCalledWith(
+      expect(
+        mockPayrollRepository.findAllPayslipsPaginated,
+      ).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         expect.any(Object),
         expect.any(Number),
@@ -180,9 +248,15 @@ describe('PayrollService', () => {
     });
 
     it('should calculate totalPages correctly for partial last page', async () => {
-      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({ data: [], total: 25 });
+      mockPayrollRepository.findAllPayslipsPaginated.mockResolvedValue({
+        data: [],
+        total: 25,
+      });
 
-      const result = await service.getAllPayslips(tenantId, { page: 1, limit: 20 });
+      const result = await service.getAllPayslips(tenantId, {
+        page: 1,
+        limit: 20,
+      });
 
       expect(result.meta.totalPages).toBe(2);
     });
@@ -194,9 +268,15 @@ describe('PayrollService', () => {
 
     it('should return payslips scoped to correct tenantId and employeeId', async () => {
       const payslips = [makePayslip()];
-      mockPayrollRepository.findPayslipsByEmployee.mockResolvedValue({ data: payslips, total: 1 });
+      mockPayrollRepository.findPayslipsByEmployee.mockResolvedValue({
+        data: payslips,
+        total: 1,
+      });
 
-      const result = await service.getEmployeePayslips(tenantId, employeeId, { page: 1, limit: 10 });
+      const result = await service.getEmployeePayslips(tenantId, employeeId, {
+        page: 1,
+        limit: 10,
+      });
 
       expect(mockPayrollRepository.findPayslipsByEmployee).toHaveBeenCalledWith(
         new Types.ObjectId(tenantId),
@@ -205,11 +285,19 @@ describe('PayrollService', () => {
         10,
       );
       expect(result.data).toHaveLength(1);
-      expect(result.meta).toEqual({ page: 1, limit: 10, total: 1, totalPages: 1 });
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 10,
+        total: 1,
+        totalPages: 1,
+      });
     });
 
     it('should use default pagination when query is empty', async () => {
-      mockPayrollRepository.findPayslipsByEmployee.mockResolvedValue({ data: [], total: 0 });
+      mockPayrollRepository.findPayslipsByEmployee.mockResolvedValue({
+        data: [],
+        total: 0,
+      });
 
       await service.getEmployeePayslips(tenantId, employeeId, {});
 
@@ -223,11 +311,15 @@ describe('PayrollService', () => {
 
     it('should scope to the given tenantId, not another tenant', async () => {
       const otherTenantId = makeId().toString();
-      mockPayrollRepository.findPayslipsByEmployee.mockResolvedValue({ data: [], total: 0 });
+      mockPayrollRepository.findPayslipsByEmployee.mockResolvedValue({
+        data: [],
+        total: 0,
+      });
 
       await service.getEmployeePayslips(otherTenantId, employeeId, {});
 
-      const callArgs = mockPayrollRepository.findPayslipsByEmployee.mock.calls[0];
+      const callArgs =
+        mockPayrollRepository.findPayslipsByEmployee.mock.calls[0];
       expect(callArgs[0].toString()).toBe(otherTenantId);
       expect(callArgs[0].toString()).not.toBe(tenantId);
     });
@@ -249,11 +341,18 @@ describe('PayrollService', () => {
     };
 
     it('should return aggregate summary from repository', async () => {
-      mockPayrollRepository.getFinanceSummaryByEmployee.mockResolvedValue(mockSummary);
+      mockPayrollRepository.getFinanceSummaryByEmployee.mockResolvedValue(
+        mockSummary,
+      );
 
-      const result = await service.getEmployeeFinanceSummary(tenantId, employeeId);
+      const result = await service.getEmployeeFinanceSummary(
+        tenantId,
+        employeeId,
+      );
 
-      expect(mockPayrollRepository.getFinanceSummaryByEmployee).toHaveBeenCalledWith(
+      expect(
+        mockPayrollRepository.getFinanceSummaryByEmployee,
+      ).toHaveBeenCalledWith(
         new Types.ObjectId(tenantId),
         new Types.ObjectId(employeeId),
       );
@@ -268,20 +367,28 @@ describe('PayrollService', () => {
         averageNetSalary: 0,
         monthlyBreakdown: [],
       };
-      mockPayrollRepository.getFinanceSummaryByEmployee.mockResolvedValue(emptySummary);
+      mockPayrollRepository.getFinanceSummaryByEmployee.mockResolvedValue(
+        emptySummary,
+      );
 
-      const result = await service.getEmployeeFinanceSummary(tenantId, employeeId);
+      const result = await service.getEmployeeFinanceSummary(
+        tenantId,
+        employeeId,
+      );
 
       expect(result.totalPayslips).toBe(0);
       expect(result.monthlyBreakdown).toHaveLength(0);
     });
 
     it('should pass correct ObjectIds to repository', async () => {
-      mockPayrollRepository.getFinanceSummaryByEmployee.mockResolvedValue(mockSummary);
+      mockPayrollRepository.getFinanceSummaryByEmployee.mockResolvedValue(
+        mockSummary,
+      );
 
       await service.getEmployeeFinanceSummary(tenantId, employeeId);
 
-      const [calledTenantId, calledEmployeeId] = mockPayrollRepository.getFinanceSummaryByEmployee.mock.calls[0];
+      const [calledTenantId, calledEmployeeId] =
+        mockPayrollRepository.getFinanceSummaryByEmployee.mock.calls[0];
       expect(calledTenantId.toString()).toBe(tenantId);
       expect(calledEmployeeId.toString()).toBe(employeeId);
     });

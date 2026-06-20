@@ -29,7 +29,12 @@ export class BranchesController {
   @Post()
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
   async create(@Body() dto: CreateBranchDto, @CurrentUser() user: JwtPayload) {
-    const branch = await this.branchesService.create(user.companyId!, dto, user.sub, user.role);
+    const branch = await this.branchesService.create(
+      user.companyId!,
+      dto,
+      user.sub,
+      user.role,
+    );
     return { data: branch };
   }
 
@@ -53,7 +58,13 @@ export class BranchesController {
     @Body() dto: UpdateBranchDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    const branch = await this.branchesService.update(user.companyId!, id, dto, user.sub, user.role);
+    const branch = await this.branchesService.update(
+      user.companyId!,
+      id,
+      dto,
+      user.sub,
+      user.role,
+    );
     return { data: branch };
   }
 
@@ -61,7 +72,12 @@ export class BranchesController {
   @Roles('COMPANY_OWNER')
   @HttpCode(HttpStatus.OK)
   async softDelete(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const branch = await this.branchesService.softDelete(user.companyId!, id, user.sub, user.role);
+    const branch = await this.branchesService.softDelete(
+      user.companyId!,
+      id,
+      user.sub,
+      user.role,
+    );
     return { data: branch };
   }
 
@@ -69,7 +85,12 @@ export class BranchesController {
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
   async activate(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const branch = await this.branchesService.activate(user.companyId!, id, user.sub, user.role);
+    const branch = await this.branchesService.activate(
+      user.companyId!,
+      id,
+      user.sub,
+      user.role,
+    );
     return { data: branch };
   }
 
@@ -77,7 +98,29 @@ export class BranchesController {
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
   async deactivate(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const branch = await this.branchesService.deactivate(user.companyId!, id, user.sub, user.role);
+    const branch = await this.branchesService.deactivate(
+      user.companyId!,
+      id,
+      user.sub,
+      user.role,
+    );
+    return { data: branch };
+  }
+
+  @Post(':id/manager')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
+  async assignManager(
+    @Param('id') id: string,
+    @Body() body: { employeeId: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const branch = await this.branchesService.assignManager(
+      user.companyId!,
+      id,
+      body.employeeId,
+      user.sub,
+      user.role,
+    );
     return { data: branch };
   }
 }

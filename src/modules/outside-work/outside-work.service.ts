@@ -8,7 +8,10 @@ import { CreateOutsideWorkDto } from './dto/create-outside-work.dto';
 import { ApproveOutsideWorkDto, RejectOutsideWorkDto } from './dto/approve-outside-work.dto';
 import { OutsideWorkQueryDto } from './dto/outside-work-query.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { NotificationType } from '../notifications/schemas/notification.schema';
+import { UsersRepository } from '../users/users.repository';
+import { UserRole } from '../users/schemas/user.schema';
 
 const MAX_LIMIT = 100;
 
@@ -19,6 +22,8 @@ export class OutsideWorkService {
     private readonly attendanceRepository: AttendanceRepository,
     private readonly employeesRepository: EmployeesRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly notificationsGateway: NotificationsGateway,
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   async request(tenantId: string, userId: string, dto: CreateOutsideWorkDto) {
@@ -30,7 +35,7 @@ export class OutsideWorkService {
         ? { type: 'Point' as const, coordinates: [dto.lng, dto.lat] as [number, number] }
         : undefined;
 
-    return this.outsideWorkRepository.create({
+    const outsideWork = await this.outsideWorkRepository.create({
       tenantId: tenantObjectId,
       employeeId: employee._id as Types.ObjectId,
       outsideType: dto.outsideType,
@@ -41,6 +46,12 @@ export class OutsideWorkService {
       photoUrls: dto.photoUrls ?? [],
       attendanceLogId: dto.attendanceLogId ? new Types.ObjectId(dto.attendanceLogId) : undefined,
     });
+
+    const outsideWorkId = (outsideWork._id as Types.ObjectId).toString();
+    const employeeName = `${employee.firstName} ${employee.lastName}`;
+    await this.notifyManagersOnNewRequest(tenantObjectId, employee, employeeName, outsideWorkId);
+
+    return outsideWork;
   }
 
   async getMy(tenantId: string, userId: string, query: OutsideWorkQueryDto) {
@@ -91,10 +102,17 @@ export class OutsideWorkService {
     }
 
     await this.notifyEmployee(item.employeeId, tenantObjectId, {
-      title: 'ຄຳຮ້ອງອອກວຽກນອກໄດ້ຮັບການອນຸມັດ',
-      body: dto.comment ? `ໝາຍເຫດ: ${dto.comment}` : 'ຄຳຮ້ອງຂອງທ່ານໄດ້ຮັບການອນຸມັດແລ້ວ',
+      title: 'ຄຳຮ້ອງອອກວຽກນອກໄດ້ຮັບການອະນຸມັດ',
+      body: dto.comment ? `ໝາຍເຫດ: ${dto.comment}` : 'ຄຳຮ້ອງຂອງທ່ານໄດ້ຮັບການອະນຸມັດແລ້ວ',
       type: 'OUTSIDE_WORK_APPROVED' as NotificationType,
       data: { outsideWorkId: id },
+    });
+
+    await this.emitStatusChangedToEmployee(item.employeeId, tenantObjectId, {
+      outsideWorkId: id,
+      status: 'APPROVED',
+      approverName: actorId,
+      comment: dto.comment,
     });
 
     return updated;
@@ -120,6 +138,12 @@ export class OutsideWorkService {
       data: { outsideWorkId: id },
     });
 
+    await this.emitStatusChangedToEmployee(item.employeeId, tenantObjectId, {
+      outsideWorkId: id,
+      status: 'REJECTED',
+      reason: dto.reason,
+    });
+
     return updated;
   }
 
@@ -137,6 +161,87 @@ export class OutsideWorkService {
 
     const { items, total } = await this.outsideWorkRepository.findReport(tenantObjectId, filter, page, limit);
     return { data: items.map((doc) => this.toResponse(doc)), meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  }
+
+  private async notifyManagersOnNewRequest(
+    tenantId: Types.ObjectId,
+    employee: Awaited<ReturnType<typeof this.findEmployeeByUserId>>,
+    employeeName: string,
+    outsideWorkId: string,
+  ): Promise<void> {
+    const notifyPayload = {
+      type: 'OUTSIDE_WORK_REQUEST',
+      message: `ພະນັກງານ ${employeeName} ຂໍອອກນອກສະຖານທີ່`,
+      outsideWorkId,
+    };
+
+    // Notify HR_ADMIN and COMPANY_OWNER
+    const managers = await this.usersRepository.findByRolesAndTenant(tenantId, [
+      'HR_ADMIN' as UserRole,
+      'COMPANY_OWNER' as UserRole,
+    ]);
+    for (const manager of managers) {
+      this.notificationsGateway.sendToUser(
+        (manager._id as Types.ObjectId).toString(),
+        'notification:new',
+        notifyPayload,
+      );
+    }
+
+    // Notify BRANCH_MANAGER of employee's branch
+    if (employee.branchId) {
+      await this.notifyBranchManager(tenantId, employee.branchId, notifyPayload);
+    }
+
+    // Notify SUPERVISOR directly linked to employee
+    if (employee.supervisorId) {
+      const supervisor = await this.employeesRepository.findById(
+        employee.supervisorId.toString(),
+        tenantId,
+      );
+      if (supervisor?.userId) {
+        this.notificationsGateway.sendToUser(
+          supervisor.userId.toString(),
+          'notification:new',
+          notifyPayload,
+        );
+      }
+    }
+  }
+
+  private async notifyBranchManager(
+    tenantId: Types.ObjectId,
+    branchId: Types.ObjectId,
+    payload: unknown,
+  ): Promise<void> {
+    const branchManagers = await this.usersRepository.findByRolesAndTenant(tenantId, [
+      'BRANCH_MANAGER' as UserRole,
+    ]);
+    for (const user of branchManagers) {
+      const userBranchId = (user as unknown as Record<string, unknown>).branchId;
+      if (userBranchId && userBranchId.toString() === branchId.toString()) {
+        this.notificationsGateway.sendToUser(
+          (user._id as Types.ObjectId).toString(),
+          'notification:new',
+          payload,
+        );
+      }
+    }
+  }
+
+  private async emitStatusChangedToEmployee(
+    employeeId: Types.ObjectId,
+    tenantId: Types.ObjectId,
+    payload: unknown,
+  ): Promise<void> {
+    const employee = await this.employeesRepository.findById(employeeId.toString(), tenantId);
+    if (employee?.userId) {
+      this.notificationsGateway.sendToUser(
+        employee.userId.toString(),
+        'outside-work:status_changed',
+        payload,
+      );
+    }
   }
 
   private async notifyEmployee(

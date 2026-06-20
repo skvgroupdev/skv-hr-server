@@ -1,10 +1,25 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, Min, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class PlanFeaturesDto {
   @IsOptional()
   @IsBoolean()
   attendance?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  shiftManagement?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  attendanceAdjustment?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -17,6 +32,10 @@ class PlanFeaturesDto {
   @IsOptional()
   @IsBoolean()
   payroll?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  restDayCompensation?: boolean;
 
   @IsOptional()
   @IsBoolean()

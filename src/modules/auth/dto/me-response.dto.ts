@@ -12,6 +12,14 @@ export interface WorkScheduleDto {
   endTime: string;
 }
 
+export interface SubscriptionSummaryDto {
+  planId: string;
+  planName: string;
+  status: string;
+  endDate: string | null;
+  isPaid: boolean;
+}
+
 export interface MeResponseDto {
   // User fields
   id: string;
@@ -20,6 +28,8 @@ export interface MeResponseDto {
   role: string;
   companyId: string | null;
   branchId: string | null;
+  features?: import('../../plans/schemas/plan.schema').PlanFeatures;
+  subscriptionSummary?: SubscriptionSummaryDto;
 
   // Employee fields (optional — absent for SUPER_ADMIN / users without linked employee)
   employeeId?: string;

@@ -9,6 +9,8 @@ import { UsersModule } from '../users/users.module';
 import { AuditLogModule } from '../audit-logs/audit-log.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { ShiftsModule } from '../shifts/shifts.module';
+import { CompaniesModule } from '../companies/companies.module';
+import { PlansModule } from '../plans/plans.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { ShiftsModule } from '../shifts/shifts.module';
     AuditLogModule,
     EmployeesModule,
     ShiftsModule,
+    CompaniesModule,
+    PlansModule,
   ],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy],
   controllers: [AuthController],

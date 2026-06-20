@@ -3,6 +3,20 @@ import { HydratedDocument } from 'mongoose';
 
 export type PlanDocument = HydratedDocument<Plan>;
 
+export interface PlanFeatures {
+  attendance: boolean;
+  shiftManagement: boolean;
+  attendanceAdjustment: boolean;
+  leave: boolean;
+  ot: boolean;
+  payroll: boolean;
+  restDayCompensation: boolean;
+  advancedReport: boolean;
+  announcement: boolean;
+}
+
+export type PlanFeature = keyof PlanFeatures;
+
 @Schema({
   timestamps: { createdAt: true, updatedAt: false },
   versionKey: false,
@@ -32,22 +46,18 @@ export class Plan {
   @Prop({
     type: {
       attendance: { type: Boolean, default: true },
+      shiftManagement: { type: Boolean, default: false },
+      attendanceAdjustment: { type: Boolean, default: false },
       leave: { type: Boolean, default: true },
       ot: { type: Boolean, default: true },
       payroll: { type: Boolean, default: false },
+      restDayCompensation: { type: Boolean, default: false },
       advancedReport: { type: Boolean, default: false },
       announcement: { type: Boolean, default: true },
     },
     default: {},
   })
-  features: {
-    attendance: boolean;
-    leave: boolean;
-    ot: boolean;
-    payroll: boolean;
-    advancedReport: boolean;
-    announcement: boolean;
-  };
+  features: PlanFeatures;
 
   @Prop({ default: 30 })
   trialDays: number;

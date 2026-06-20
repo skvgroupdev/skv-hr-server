@@ -4,6 +4,13 @@ import { HydratedDocument, Types } from 'mongoose';
 export type CompanyDocument = HydratedDocument<Company>;
 
 export type CompanyStatus = 'ACTIVE' | 'SUSPENDED' | 'TRIAL' | 'EXPIRED';
+export type SubscriptionStatus =
+  | 'TRIAL'
+  | 'ACTIVE'
+  | 'PAST_DUE'
+  | 'EXPIRED'
+  | 'CANCELLED'
+  | 'SUSPENDED';
 
 @Schema({
   timestamps: true,
@@ -18,6 +25,10 @@ export type CompanyStatus = 'ACTIVE' | 'SUSPENDED' | 'TRIAL' | 'EXPIRED';
 export class Company {
   @Prop({ required: true, trim: true })
   name: string;
+
+  // 3–5 uppercase letters, used as prefix in employee codes e.g. "SKV"
+  @Prop({ trim: true, uppercase: true })
+  companyCode?: string;
 
   @Prop()
   logo?: string;
@@ -55,7 +66,11 @@ export class Company {
     type: {
       startDate: Date,
       endDate: Date,
-      status: { type: String, enum: ['TRIAL', 'ACTIVE', 'EXPIRED', 'SUSPENDED'], default: 'TRIAL' },
+      status: {
+        type: String,
+        enum: ['TRIAL', 'ACTIVE', 'PAST_DUE', 'EXPIRED', 'CANCELLED', 'SUSPENDED'],
+        default: 'TRIAL',
+      },
       isPaid: { type: Boolean, default: false },
     },
     default: {},
@@ -63,7 +78,7 @@ export class Company {
   subscription: {
     startDate?: Date;
     endDate?: Date;
-    status: 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED';
+    status: SubscriptionStatus;
     isPaid: boolean;
   };
 }

@@ -1,20 +1,31 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { EmployeesService } from '../employees.service';
 import { EmployeesRepository } from '../employees.repository';
 import { UsersRepository } from '../../users/users.repository';
+import { CompaniesRepository } from '../../companies/companies.repository';
+import { PlansRepository } from '../../plans/plans.repository';
 import { AuditLogService } from '../../audit-logs/audit-log.service';
 import { DocumentsService } from '../../documents/documents.service';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import type { JwtPayload } from '../../auth/strategies/jwt.strategy';
 
 const TENANT_ID = new Types.ObjectId().toString();
+const PLAN_ID = new Types.ObjectId().toString();
 const ACTOR_ID = new Types.ObjectId().toString();
 const EMPLOYEE_ID = new Types.ObjectId().toString();
 const BRANCH_ID = new Types.ObjectId().toString();
+const SUPERVISOR_EMPLOYEE_ID = new Types.ObjectId().toString();
 
-function makeJwtPayload(role = 'HR_ADMIN', overrides: Partial<JwtPayload> = {}): JwtPayload {
+function makeJwtPayload(
+  role = 'HR_ADMIN',
+  overrides: Partial<JwtPayload> = {},
+): JwtPayload {
   return {
     sub: ACTOR_ID,
     role,
@@ -25,7 +36,7 @@ function makeJwtPayload(role = 'HR_ADMIN', overrides: Partial<JwtPayload> = {}):
 }
 
 function makeEmployeeDoc(overrides = {}) {
-  return {
+  const data = {
     _id: new Types.ObjectId(EMPLOYEE_ID),
     firstName: 'John',
     lastName: 'Doe',
@@ -36,6 +47,7 @@ function makeEmployeeDoc(overrides = {}) {
     userId: null,
     ...overrides,
   };
+  return { ...data, toJSON: () => ({ ...data }) };
 }
 
 function makeUserDoc(overrides = {}) {
@@ -51,6 +63,8 @@ describe('EmployeesService', () => {
   let service: EmployeesService;
   let employeesRepository: jest.Mocked<EmployeesRepository>;
   let usersRepository: jest.Mocked<UsersRepository>;
+  let companiesRepository: jest.Mocked<CompaniesRepository>;
+  let plansRepository: jest.Mocked<PlansRepository>;
   let auditLogService: jest.Mocked<AuditLogService>;
   let documentsService: jest.Mocked<DocumentsService>;
 
@@ -69,6 +83,7 @@ describe('EmployeesService', () => {
             linkUser: jest.fn(),
             countByTenant: jest.fn(),
             generateNextCode: jest.fn(),
+            findByUserIdAndTenant: jest.fn(),
           },
         },
         {
@@ -76,6 +91,18 @@ describe('EmployeesService', () => {
           useValue: {
             create: jest.fn(),
             existsByPhoneAndCompany: jest.fn(),
+          },
+        },
+        {
+          provide: CompaniesRepository,
+          useValue: {
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: PlansRepository,
+          useValue: {
+            findById: jest.fn(),
           },
         },
         {
@@ -95,8 +122,19 @@ describe('EmployeesService', () => {
     service = module.get<EmployeesService>(EmployeesService);
     employeesRepository = module.get(EmployeesRepository);
     usersRepository = module.get(UsersRepository);
+    companiesRepository = module.get(CompaniesRepository);
+    plansRepository = module.get(PlansRepository);
     auditLogService = module.get(AuditLogService);
     documentsService = module.get(DocumentsService);
+
+    companiesRepository.findById.mockResolvedValue({
+      planId: new Types.ObjectId(PLAN_ID),
+    } as never);
+    plansRepository.findById.mockResolvedValue({
+      isActive: true,
+      maxEmployees: 50,
+    } as never);
+    employeesRepository.countByTenant.mockResolvedValue(0);
   });
 
   describe('create', () => {
@@ -123,7 +161,10 @@ describe('EmployeesService', () => {
 
       expect(employeesRepository.create).toHaveBeenCalledWith(
         new Types.ObjectId(TENANT_ID),
-        expect.objectContaining({ firstName: 'John', employeeCode: 'EMP-202605-001' }),
+        expect.objectContaining({
+          firstName: 'John',
+          employeeCode: 'EMP-202605-001',
+        }),
       );
       expect(usersRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({ phone: dto.phone, role: 'STAFF' }),
@@ -152,7 +193,22 @@ describe('EmployeesService', () => {
       employeesRepository.generateNextCode.mockResolvedValue('EMP-202605-001');
       employeesRepository.create.mockRejectedValue({ code: 11000 });
 
-      await expect(service.create(makeJwtPayload(), dto)).rejects.toThrow(ConflictException);
+      await expect(service.create(makeJwtPayload(), dto)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('throws ForbiddenException when employee quota is reached', async () => {
+      employeesRepository.countByTenant.mockResolvedValue(50);
+      plansRepository.findById.mockResolvedValue({
+        isActive: true,
+        maxEmployees: 50,
+      } as never);
+
+      await expect(service.create(makeJwtPayload(), dto)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(employeesRepository.create).not.toHaveBeenCalled();
     });
   });
 
@@ -181,17 +237,22 @@ describe('EmployeesService', () => {
     it('throws NotFoundException when employee does not exist', async () => {
       employeesRepository.findById.mockResolvedValue(null);
 
-      await expect(service.deactivate(makeJwtPayload(), EMPLOYEE_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.deactivate(makeJwtPayload(), EMPLOYEE_ID),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('list (scope filter)', () => {
     it('BRANCH_MANAGER list is filtered to their own branchId', async () => {
-      employeesRepository.findPaginated.mockResolvedValue({ employees: [], total: 0 });
+      employeesRepository.findPaginated.mockResolvedValue({
+        employees: [],
+        total: 0,
+      });
 
-      const branchManagerUser = makeJwtPayload('BRANCH_MANAGER', { branchId: BRANCH_ID });
+      const branchManagerUser = makeJwtPayload('BRANCH_MANAGER', {
+        branchId: BRANCH_ID,
+      });
       await service.list(branchManagerUser, {});
 
       expect(employeesRepository.findPaginated).toHaveBeenCalledWith(
@@ -203,7 +264,13 @@ describe('EmployeesService', () => {
     });
 
     it('SUPERVISOR list is filtered to employees they manage/supervise', async () => {
-      employeesRepository.findPaginated.mockResolvedValue({ employees: [], total: 0 });
+      employeesRepository.findPaginated.mockResolvedValue({
+        employees: [],
+        total: 0,
+      });
+      employeesRepository.findByUserIdAndTenant.mockResolvedValue({
+        _id: new Types.ObjectId(SUPERVISOR_EMPLOYEE_ID),
+      } as never);
 
       const supervisorUser = makeJwtPayload('SUPERVISOR');
       await service.list(supervisorUser, {});
@@ -211,8 +278,8 @@ describe('EmployeesService', () => {
       expect(employeesRepository.findPaginated).toHaveBeenCalledWith(
         expect.objectContaining({
           $or: expect.arrayContaining([
-            { managerId: new Types.ObjectId(ACTOR_ID) },
-            { supervisorId: new Types.ObjectId(ACTOR_ID) },
+            { managerId: new Types.ObjectId(SUPERVISOR_EMPLOYEE_ID) },
+            { supervisorId: new Types.ObjectId(SUPERVISOR_EMPLOYEE_ID) },
           ]),
         }),
         expect.any(Number),
@@ -222,7 +289,10 @@ describe('EmployeesService', () => {
     });
 
     it('HR_ADMIN list has no extra scope restrictions', async () => {
-      employeesRepository.findPaginated.mockResolvedValue({ employees: [], total: 0 });
+      employeesRepository.findPaginated.mockResolvedValue({
+        employees: [],
+        total: 0,
+      });
 
       await service.list(makeJwtPayload('HR_ADMIN'), {});
 
@@ -242,7 +312,7 @@ describe('EmployeesService', () => {
       const staffUser = makeJwtPayload('STAFF');
       const result = await service.getOne(staffUser, EMPLOYEE_ID);
 
-      expect(result).toEqual(employeeDoc);
+      expect(result).toEqual(expect.objectContaining({ firstName: 'John' }));
     });
 
     it('STAFF cannot access another employee record', async () => {
@@ -252,15 +322,17 @@ describe('EmployeesService', () => {
       employeesRepository.findById.mockResolvedValue(employeeDoc as never);
 
       const staffUser = makeJwtPayload('STAFF');
-      await expect(service.getOne(staffUser, EMPLOYEE_ID)).rejects.toThrow(ForbiddenException);
+      await expect(service.getOne(staffUser, EMPLOYEE_ID)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('throws NotFoundException when employee not found', async () => {
       employeesRepository.findById.mockResolvedValue(null);
 
-      await expect(service.getOne(makeJwtPayload(), EMPLOYEE_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getOne(makeJwtPayload(), EMPLOYEE_ID),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

@@ -1,47 +1,69 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { AttendanceLog, AttendanceLogDocument, AttendanceStatus, AttendanceType } from './schemas/attendance-log.schema';
+import {
+  AttendanceLog,
+  AttendanceLogDocument,
+  AttendanceStatus,
+  AttendanceType,
+} from './schemas/attendance-log.schema';
 
 @Injectable()
 export class AttendanceRepository {
   constructor(
-    @InjectModel(AttendanceLog.name) private readonly logModel: Model<AttendanceLogDocument>,
+    @InjectModel(AttendanceLog.name)
+    private readonly logModel: Model<AttendanceLogDocument>,
   ) {}
 
   create(data: Partial<AttendanceLog>): Promise<AttendanceLogDocument> {
     return this.logModel.create(data);
   }
 
-  findById(id: string, tenantId: Types.ObjectId): Promise<AttendanceLogDocument | null> {
+  findById(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<AttendanceLogDocument | null> {
     return this.logModel.findOne({ _id: id, tenantId }).exec();
   }
 
-  findTodayCheckIn(employeeId: Types.ObjectId, tenantId: Types.ObjectId): Promise<AttendanceLogDocument | null> {
+  findTodayCheckIn(
+    employeeId: Types.ObjectId,
+    tenantId: Types.ObjectId,
+  ): Promise<AttendanceLogDocument | null> {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    return this.logModel.findOne({
-      employeeId,
-      tenantId,
-      type: 'CHECK_IN',
-      serverTime: { $gte: startOfDay, $lte: endOfDay },
-    }).sort({ serverTime: -1 }).exec();
+    return this.logModel
+      .findOne({
+        employeeId,
+        tenantId,
+        type: 'CHECK_IN',
+        checkTime: { $gte: startOfDay, $lte: endOfDay },
+        status: { $ne: 'MANUAL_ADJUSTED' },
+      })
+      .sort({ checkTime: -1 })
+      .exec();
   }
 
-  findTodayLogs(employeeId: Types.ObjectId, tenantId: Types.ObjectId): Promise<AttendanceLogDocument[]> {
+  findTodayLogs(
+    employeeId: Types.ObjectId,
+    tenantId: Types.ObjectId,
+  ): Promise<AttendanceLogDocument[]> {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    return this.logModel.find({
-      employeeId,
-      tenantId,
-      serverTime: { $gte: startOfDay, $lte: endOfDay },
-    }).sort({ serverTime: 1 }).exec();
+    return this.logModel
+      .find({
+        employeeId,
+        tenantId,
+        checkTime: { $gte: startOfDay, $lte: endOfDay },
+      })
+      .sort({ checkTime: 1 })
+      .exec();
   }
 
   async findPaginated(
@@ -56,12 +78,19 @@ export class AttendanceRepository {
     const filter: Record<string, unknown> = { tenantId, employeeId };
     if (startDate || endDate) {
       filter.serverTime = {};
-      if (startDate) (filter.serverTime as Record<string, unknown>).$gte = startDate;
-      if (endDate) (filter.serverTime as Record<string, unknown>).$lte = endDate;
+      if (startDate)
+        (filter.serverTime as Record<string, unknown>).$gte = startDate;
+      if (endDate)
+        (filter.serverTime as Record<string, unknown>).$lte = endDate;
     }
 
     const [logs, total] = await Promise.all([
-      this.logModel.find(filter).sort({ serverTime: -1 }).skip(skip).limit(limit).exec(),
+      this.logModel
+        .find(filter)
+        .sort({ serverTime: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
       this.logModel.countDocuments(filter).exec(),
     ]);
 
@@ -74,7 +103,10 @@ export class AttendanceRepository {
     endDate: Date,
     branchId?: Types.ObjectId,
   ): Promise<AttendanceLogDocument[]> {
-    const filter: Record<string, unknown> = { tenantId, serverTime: { $gte: startDate, $lte: endDate } };
+    const filter: Record<string, unknown> = {
+      tenantId,
+      checkTime: { $gte: startDate, $lte: endDate },
+    };
     if (branchId) filter.branchId = branchId;
     return this.logModel.find(filter).sort({ serverTime: -1 }).exec();
   }
@@ -86,7 +118,11 @@ export class AttendanceRepository {
     endDate: Date,
     branchId?: Types.ObjectId,
   ): Promise<AttendanceLogDocument[]> {
-    const filter: Record<string, unknown> = { tenantId, status, serverTime: { $gte: startDate, $lte: endDate } };
+    const filter: Record<string, unknown> = {
+      tenantId,
+      status,
+      checkTime: { $gte: startDate, $lte: endDate },
+    };
     if (branchId) filter.branchId = branchId;
     return this.logModel.find(filter).exec();
   }
@@ -96,11 +132,20 @@ export class AttendanceRepository {
     tenantId: Types.ObjectId,
     update: Partial<AttendanceLog>,
   ): Promise<AttendanceLogDocument | null> {
-    return this.logModel.findOneAndUpdate({ _id: id, tenantId }, update, { returnDocument: 'after' }).exec();
+    return this.logModel
+      .findOneAndUpdate({ _id: id, tenantId }, update, {
+        returnDocument: 'after',
+      })
+      .exec();
   }
 
-  updateStatus(id: string, status: AttendanceStatus): Promise<AttendanceLogDocument | null> {
-    return this.logModel.findByIdAndUpdate(id, { status }, { returnDocument: 'after' }).exec();
+  updateStatus(
+    id: string,
+    status: AttendanceStatus,
+  ): Promise<AttendanceLogDocument | null> {
+    return this.logModel
+      .findByIdAndUpdate(id, { status }, { returnDocument: 'after' })
+      .exec();
   }
 
   async findDailyPaginated(
@@ -114,8 +159,10 @@ export class AttendanceRepository {
     const matchStage: Record<string, unknown> = { tenantId, employeeId };
     if (startDate || endDate) {
       matchStage.checkTime = {};
-      if (startDate) (matchStage.checkTime as Record<string, unknown>).$gte = startDate;
-      if (endDate) (matchStage.checkTime as Record<string, unknown>).$lte = endDate;
+      if (startDate)
+        (matchStage.checkTime as Record<string, unknown>).$gte = startDate;
+      if (endDate)
+        (matchStage.checkTime as Record<string, unknown>).$lte = endDate;
     }
 
     // Group by Bangkok date (UTC+7): add 7h offset before truncating to date
@@ -142,7 +189,8 @@ export class AttendanceRepository {
       },
     ]);
 
-    const days: Array<{ _id: string; logs: AttendanceLog[] }> = result?.data ?? [];
+    const days: Array<{ _id: string; logs: AttendanceLog[] }> =
+      result?.data ?? [];
     const total: number = result?.totalCount?.[0]?.count ?? 0;
 
     return { days, total };
@@ -155,7 +203,11 @@ export class AttendanceRepository {
     endDate: Date,
     branchId?: Types.ObjectId,
   ): Promise<AttendanceLogDocument[]> {
-    const filter: Record<string, unknown> = { tenantId, type, serverTime: { $gte: startDate, $lte: endDate } };
+    const filter: Record<string, unknown> = {
+      tenantId,
+      type,
+      checkTime: { $gte: startDate, $lte: endDate },
+    };
     if (branchId) filter.branchId = branchId;
     return this.logModel.find(filter).exec();
   }
@@ -166,7 +218,11 @@ export class AttendanceRepository {
     end: Date,
   ): Promise<string[]> {
     const logs = await this.logModel
-      .find({ tenantId, type: 'CHECK_IN', serverTime: { $gte: start, $lte: end } })
+      .find({
+        tenantId,
+        type: 'CHECK_IN',
+        checkTime: { $gte: start, $lte: end },
+      })
       .select('employeeId')
       .lean()
       .exec();
@@ -177,6 +233,7 @@ export class AttendanceRepository {
   async getSummaryForDate(
     tenantId: Types.ObjectId,
     date: Date,
+    branchId?: Types.ObjectId,
   ): Promise<{ checkedIn: number; late: number }> {
     const start = new Date(date);
     start.setUTCHours(0, 0, 0, 0);
@@ -184,7 +241,12 @@ export class AttendanceRepository {
     end.setUTCHours(23, 59, 59, 999);
 
     const checkIns = await this.logModel
-      .find({ tenantId, type: 'CHECK_IN', checkTime: { $gte: start, $lte: end } })
+      .find({
+        tenantId,
+        type: 'CHECK_IN',
+        checkTime: { $gte: start, $lte: end },
+        ...(branchId ? { branchId } : {}),
+      })
       .lean();
 
     const checkedIn = checkIns.length;
@@ -193,5 +255,57 @@ export class AttendanceRepository {
     ).length;
 
     return { checkedIn, late };
+  }
+
+  findLogsForEmployeeInMonth(
+    tenantId: Types.ObjectId,
+    employeeId: Types.ObjectId,
+    start: Date,
+    end: Date,
+  ): Promise<AttendanceLogDocument[]> {
+    return this.logModel
+      .find({
+        tenantId,
+        employeeId,
+        checkTime: { $gte: start, $lte: end },
+      })
+      .sort({ checkTime: 1 })
+      .lean()
+      .exec() as unknown as Promise<AttendanceLogDocument[]>;
+  }
+
+  async countPresenceDaysByEmployee(
+    tenantId: Types.ObjectId,
+    employeeIds: Types.ObjectId[],
+    startDate: Date,
+    endDate: Date,
+  ): Promise<Map<string, number>> {
+    const rows = await this.logModel
+      .aggregate<{ _id: Types.ObjectId; days: number }>([
+        {
+          $match: {
+            tenantId,
+            employeeId: { $in: employeeIds },
+            type: 'CHECK_IN',
+            checkTime: { $gte: startDate, $lte: endDate },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              employeeId: '$employeeId',
+              date: {
+                $dateToString: {
+                  format: '%Y-%m-%d',
+                  date: { $add: ['$checkTime', 7 * 60 * 60 * 1000] },
+                },
+              },
+            },
+          },
+        },
+        { $group: { _id: '$_id.employeeId', days: { $sum: 1 } } },
+      ])
+      .exec();
+    return new Map(rows.map((row) => [row._id.toString(), row.days]));
   }
 }

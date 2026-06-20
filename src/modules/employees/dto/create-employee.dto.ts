@@ -46,6 +46,18 @@ export class CreateEmployeeDto {
   lastName: string;
 
   @IsOptional()
+  @IsString()
+  firstNameEn?: string;
+
+  @IsOptional()
+  @IsString()
+  lastNameEn?: string;
+
+  @IsOptional()
+  @IsString()
+  nickname?: string;
+
+  @IsOptional()
   @IsEnum(['MALE', 'FEMALE', 'OTHER'])
   gender?: 'MALE' | 'FEMALE' | 'OTHER';
 

@@ -3,7 +3,12 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type AttendanceLogDocument = HydratedDocument<AttendanceLog>;
 
-export type AttendanceType = 'CHECK_IN' | 'CHECK_OUT' | 'BREAK_IN' | 'BREAK_OUT' | 'MANUAL_ADJUSTMENT';
+export type AttendanceType =
+  | 'CHECK_IN'
+  | 'CHECK_OUT'
+  | 'BREAK_IN'
+  | 'BREAK_OUT'
+  | 'MANUAL_ADJUSTMENT';
 
 export type AttendanceStatus =
   | 'NORMAL'
@@ -39,7 +44,13 @@ export class AttendanceLog {
 
   @Prop({
     type: String,
-    enum: ['CHECK_IN', 'CHECK_OUT', 'BREAK_IN', 'BREAK_OUT', 'MANUAL_ADJUSTMENT'],
+    enum: [
+      'CHECK_IN',
+      'CHECK_OUT',
+      'BREAK_IN',
+      'BREAK_OUT',
+      'MANUAL_ADJUSTMENT',
+    ],
     required: true,
   })
   type: AttendanceType;
@@ -80,7 +91,18 @@ export class AttendanceLog {
 
   @Prop({
     type: String,
-    enum: ['NORMAL', 'LATE_MINOR', 'LATE', 'EARLY_LEAVE', 'ABSENT', 'MISSING_CHECKOUT', 'OUTSIDE_PENDING', 'OUTSIDE_APPROVED', 'OUTSIDE_REJECTED', 'MANUAL_ADJUSTED'],
+    enum: [
+      'NORMAL',
+      'LATE_MINOR',
+      'LATE',
+      'EARLY_LEAVE',
+      'ABSENT',
+      'MISSING_CHECKOUT',
+      'OUTSIDE_PENDING',
+      'OUTSIDE_APPROVED',
+      'OUTSIDE_REJECTED',
+      'MANUAL_ADJUSTED',
+    ],
     default: 'NORMAL',
   })
   status: AttendanceStatus;
@@ -99,6 +121,12 @@ export class AttendanceLog {
 
   @Prop({ type: String })
   earlyLeaveReason?: string;
+
+  @Prop({ type: Object })
+  scheduleSnapshot?: Record<string, unknown>;
+
+  @Prop({ type: Types.ObjectId, ref: 'AttendanceLog' })
+  correctionFor?: Types.ObjectId;
 }
 
 export const AttendanceLogSchema = SchemaFactory.createForClass(AttendanceLog);

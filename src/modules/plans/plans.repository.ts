@@ -23,4 +23,8 @@ export class PlansRepository {
   update(id: string, data: Partial<Plan>): Promise<PlanDocument | null> {
     return this.model.findByIdAndUpdate(id, data, { returnDocument: 'after' }).exec();
   }
+
+  findByName(name: string): Promise<PlanDocument | null> {
+    return this.model.findOne({ name, isActive: true }).exec();
+  }
 }

@@ -45,7 +45,7 @@ export class OutsideWorkController {
   }
 
   @Post(':id/approve')
-  @Roles('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
   async approve(@Param('id') id: string, @Body() dto: ApproveOutsideWorkDto, @CurrentUser() user: JwtPayload) {
     const item = await this.outsideWorkService.approve(user.companyId!, id, user.sub, dto);
@@ -53,7 +53,7 @@ export class OutsideWorkController {
   }
 
   @Post(':id/reject')
-  @Roles('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
   async reject(@Param('id') id: string, @Body() dto: RejectOutsideWorkDto, @CurrentUser() user: JwtPayload) {
     const item = await this.outsideWorkService.reject(user.companyId!, id, user.sub, dto);

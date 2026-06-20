@@ -1,4 +1,16 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { LeaveService } from './leave.service';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
@@ -9,17 +21,25 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { RequireFeatures } from '../../common/decorators/require-features.decorator';
 
 @Controller()
 @UseGuards(RolesGuard)
+@RequireFeatures('leave')
 export class LeaveController {
   constructor(private readonly leaveService: LeaveService) {}
 
   // Leave Types
   @Post('leave-types')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async createLeaveType(@Body() dto: CreateLeaveTypeDto, @CurrentUser() user: JwtPayload) {
-    const leaveType = await this.leaveService.createLeaveType(user.companyId!, dto);
+  async createLeaveType(
+    @Body() dto: CreateLeaveTypeDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const leaveType = await this.leaveService.createLeaveType(
+      user.companyId!,
+      dto,
+    );
     return { data: leaveType };
   }
 
@@ -36,22 +56,39 @@ export class LeaveController {
     @Body() dto: Partial<CreateLeaveTypeDto>,
     @CurrentUser() user: JwtPayload,
   ) {
-    const leaveType = await this.leaveService.updateLeaveType(user.companyId!, id, dto);
+    const leaveType = await this.leaveService.updateLeaveType(
+      user.companyId!,
+      id,
+      dto,
+    );
     return { data: leaveType };
   }
 
   @Delete('leave-types/:id')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
-  async deleteLeaveType(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    const leaveType = await this.leaveService.deleteLeaveType(user.companyId!, id);
+  async deleteLeaveType(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const leaveType = await this.leaveService.deleteLeaveType(
+      user.companyId!,
+      id,
+    );
     return { data: leaveType };
   }
 
   // Leave Requests
   @Post('leave/request')
-  async request(@Body() dto: CreateLeaveRequestDto, @CurrentUser() user: JwtPayload) {
-    const leave = await this.leaveService.request(user.companyId!, user.sub, dto);
+  async request(
+    @Body() dto: CreateLeaveRequestDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const leave = await this.leaveService.request(
+      user.companyId!,
+      user.sub,
+      dto,
+    );
     return { data: leave };
   }
 
@@ -69,20 +106,32 @@ export class LeaveController {
 
   @Get('leave/report')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async getReport(@Query() query: LeaveQueryDto, @CurrentUser() user: JwtPayload) {
+  async getReport(
+    @Query() query: LeaveQueryDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
     return this.leaveService.getReport(user.companyId!, query);
   }
 
   @Get('leave/balance/my')
   async getMyBalance(@CurrentUser() user: JwtPayload) {
-    const balances = await this.leaveService.getMyBalance(user.companyId!, user.sub);
+    const balances = await this.leaveService.getMyBalance(
+      user.companyId!,
+      user.sub,
+    );
     return { data: balances };
   }
 
   @Get('leave/balance/:employeeId')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async getEmployeeBalance(@Param('employeeId') employeeId: string, @CurrentUser() user: JwtPayload) {
-    const balances = await this.leaveService.getEmployeeBalance(user.companyId!, employeeId);
+  async getEmployeeBalance(
+    @Param('employeeId') employeeId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const balances = await this.leaveService.getEmployeeBalance(
+      user.companyId!,
+      employeeId,
+    );
     return { data: balances };
   }
 
@@ -93,7 +142,11 @@ export class LeaveController {
     @Body() dto: LeaveBalanceAdjustDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    const balance = await this.leaveService.adjustBalance(user.companyId!, employeeId, dto);
+    const balance = await this.leaveService.adjustBalance(
+      user.companyId!,
+      employeeId,
+      dto,
+    );
     return { data: balance };
   }
 
@@ -104,18 +157,38 @@ export class LeaveController {
   }
 
   @Post('leave/:id/approve')
-  @Roles('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
-  async approve(@Param('id') id: string, @Body() dto: ApproveLeaveDto, @CurrentUser() user: JwtPayload) {
-    const leave = await this.leaveService.approve(user.companyId!, id, user.sub, user.role, dto);
+  async approve(
+    @Param('id') id: string,
+    @Body() dto: ApproveLeaveDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const leave = await this.leaveService.approve(
+      user.companyId!,
+      id,
+      user.sub,
+      user.role,
+      dto,
+    );
     return { data: leave };
   }
 
   @Post('leave/:id/reject')
-  @Roles('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
-  async reject(@Param('id') id: string, @Body() dto: RejectLeaveDto, @CurrentUser() user: JwtPayload) {
-    const leave = await this.leaveService.reject(user.companyId!, id, user.sub, user.role, dto);
+  async reject(
+    @Param('id') id: string,
+    @Body() dto: RejectLeaveDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const leave = await this.leaveService.reject(
+      user.companyId!,
+      id,
+      user.sub,
+      user.role,
+      dto,
+    );
     return { data: leave };
   }
 

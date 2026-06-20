@@ -1,4 +1,15 @@
-import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { OTService } from './ot.service';
 import { CreateOTRequestDto } from './dto/create-ot-request.dto';
 import { UpdateOTPolicyDto } from './dto/update-ot-policy.dto';
@@ -8,9 +19,11 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { RequireFeatures } from '../../common/decorators/require-features.decorator';
 
 @Controller('ot')
 @UseGuards(RolesGuard)
+@RequireFeatures('ot')
 export class OTController {
   constructor(private readonly otService: OTService) {}
 
@@ -22,13 +35,19 @@ export class OTController {
 
   @Patch('policy')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
-  async updatePolicy(@Body() dto: UpdateOTPolicyDto, @CurrentUser() user: JwtPayload) {
+  async updatePolicy(
+    @Body() dto: UpdateOTPolicyDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
     const policy = await this.otService.updatePolicy(user.companyId!, dto);
     return { data: policy };
   }
 
   @Post('request')
-  async request(@Body() dto: CreateOTRequestDto, @CurrentUser() user: JwtPayload) {
+  async request(
+    @Body() dto: CreateOTRequestDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
     const ot = await this.otService.request(user.companyId!, user.sub, dto);
     return { data: ot };
   }
@@ -58,18 +77,38 @@ export class OTController {
   }
 
   @Post(':id/approve')
-  @Roles('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
-  async approve(@Param('id') id: string, @Body() dto: ApproveOTDto, @CurrentUser() user: JwtPayload) {
-    const ot = await this.otService.approve(user.companyId!, id, user.sub, user.role, dto);
+  async approve(
+    @Param('id') id: string,
+    @Body() dto: ApproveOTDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const ot = await this.otService.approve(
+      user.companyId!,
+      id,
+      user.sub,
+      user.role,
+      dto,
+    );
     return { data: ot };
   }
 
   @Post(':id/reject')
-  @Roles('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
-  async reject(@Param('id') id: string, @Body() dto: RejectOTDto, @CurrentUser() user: JwtPayload) {
-    const ot = await this.otService.reject(user.companyId!, id, user.sub, user.role, dto);
+  async reject(
+    @Param('id') id: string,
+    @Body() dto: RejectOTDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const ot = await this.otService.reject(
+      user.companyId!,
+      id,
+      user.sub,
+      user.role,
+      dto,
+    );
     return { data: ot };
   }
 

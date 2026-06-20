@@ -8,6 +8,7 @@ import { LeaveService } from './leave.service';
 import { LeaveController } from './leave.controller';
 import { EmployeesModule } from '../employees/employees.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ]),
     EmployeesModule,
     NotificationsModule,
+    UsersModule,
   ],
   providers: [LeaveRepository, LeaveService],
   controllers: [LeaveController],

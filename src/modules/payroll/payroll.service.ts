@@ -15,6 +15,12 @@ import { EmployeesRepository } from '../employees/employees.repository';
 import { OTRepository } from '../ot/ot.repository';
 import { LeaveRepository } from '../leave/leave.repository';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto';
+import { CompanyPoliciesService } from '../company-policies/company-policies.service';
+import { UpdatePayrollPolicyDto as FullUpdatePayrollPolicyDto } from '../company-policies/dto/update-payroll-policy.dto';
+import { UpdatePayrollPolicyDto } from './dto/update-payroll-policy.dto';
+import { ShiftsRepository } from '../shifts/shifts.repository';
+import { UpdatePayslipAdjustmentsDto } from './dto/update-payslip-adjustments.dto';
+import { AttendanceRepository } from '../attendance/attendance.repository';
 
 const MAX_LIMIT = 100;
 
@@ -29,9 +35,16 @@ export class PayrollService {
     private readonly employeesRepository: EmployeesRepository,
     private readonly otRepository: OTRepository,
     private readonly leaveRepository: LeaveRepository,
+    private readonly companyPoliciesService: CompanyPoliciesService,
+    private readonly shiftsRepository: ShiftsRepository,
+    private readonly attendanceRepository: AttendanceRepository,
   ) {}
 
-  async createPeriod(tenantId: string, userId: string, dto: CreatePayrollPeriodDto) {
+  async createPeriod(
+    tenantId: string,
+    userId: string,
+    dto: CreatePayrollPeriodDto,
+  ) {
     return this.payrollRepository.createPeriod({
       tenantId: new Types.ObjectId(tenantId),
       name: dto.name,
@@ -47,25 +60,46 @@ export class PayrollService {
       page,
       safeLimit,
     );
-    return { data: items, meta: { page, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } };
+    return {
+      data: items,
+      meta: {
+        page,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
   }
 
   async getPeriod(tenantId: string, id: string) {
-    const period = await this.payrollRepository.findPeriodById(id, new Types.ObjectId(tenantId));
+    const period = await this.payrollRepository.findPeriodById(
+      id,
+      new Types.ObjectId(tenantId),
+    );
     if (!period) throw new NotFoundException('Payroll period not found');
     return period;
   }
 
   async generatePayroll(tenantId: string, periodId: string, actorId: string) {
     const tenantObjectId = new Types.ObjectId(tenantId);
-    const period = await this.payrollRepository.findPeriodById(periodId, tenantObjectId);
+    const period = await this.payrollRepository.findPeriodById(
+      periodId,
+      tenantObjectId,
+    );
     if (!period) throw new NotFoundException('Payroll period not found');
-    if (period.status !== 'DRAFT') throw new BadRequestException('Can only generate DRAFT period');
+    if (period.status !== 'DRAFT')
+      throw new BadRequestException('Can only generate DRAFT period');
 
     const { taxConfig, companyConfig } = await this.resolveTaxConfig(tenantId);
+    const payrollPolicy = await this.companyPoliciesService.getEffectivePolicy(
+      tenantId,
+      period.endDate,
+    );
 
     const { employees } = await this.employeesRepository.findPaginated(
-      { tenantId: tenantObjectId, status: 'ACTIVE' } as unknown as Parameters<EmployeesRepository['findPaginated']>[0],
+      { tenantId: tenantObjectId, status: 'ACTIVE' } as unknown as Parameters<
+        EmployeesRepository['findPaginated']
+      >[0],
       1,
       1000,
       '-createdAt',
@@ -92,18 +126,26 @@ export class PayrollService {
       const empId = ot.employeeId.toString();
       const dayType = (ot as { dayType?: string }).dayType ?? 'weekday';
       const rate =
-        dayType === 'holiday' ? otPolicy.holidayRate
-        : dayType === 'weekend' ? otPolicy.weekendRate
-        : otPolicy.weekdayRate;
+        dayType === 'holiday'
+          ? otPolicy.holidayRate
+          : dayType === 'weekend'
+            ? otPolicy.weekendRate
+            : otPolicy.weekdayRate;
       // Store rate-weighted hours so tax service multiplies by 1.0 rate
-      otAmountByEmployee.set(empId, (otAmountByEmployee.get(empId) ?? 0) + ot.totalHours * rate);
+      otAmountByEmployee.set(
+        empId,
+        (otAmountByEmployee.get(empId) ?? 0) + ot.totalHours * rate,
+      );
     }
 
     // Raw hours still needed for display
     const otHoursByEmployee = new Map<string, number>();
     for (const ot of otRequests) {
       const empId = ot.employeeId.toString();
-      otHoursByEmployee.set(empId, (otHoursByEmployee.get(empId) ?? 0) + ot.totalHours);
+      otHoursByEmployee.set(
+        empId,
+        (otHoursByEmployee.get(empId) ?? 0) + ot.totalHours,
+      );
     }
 
     const leaveRequests = await this.leaveRepository.findApprovedInDateRange(
@@ -112,24 +154,55 @@ export class PayrollService {
       period.endDate,
     );
 
-    const leaveByEmployee = new Map<string, number>();
+    const paidLeaveByEmployee = new Map<string, number>();
+    const restDaysByEmployee = new Map<string, number>();
     for (const leave of leaveRequests) {
       const empId = leave.employeeId.toString();
-      leaveByEmployee.set(empId, (leaveByEmployee.get(empId) ?? 0) + leave.totalDays);
+      const target =
+        leave.category === 'REST_DAY'
+          ? restDaysByEmployee
+          : paidLeaveByEmployee;
+      if (leave.category !== 'REST_DAY' && !leave.isPaid) continue;
+      target.set(empId, (target.get(empId) ?? 0) + leave.totalDays);
     }
+
+    const employeeIds = employees.map(
+      (employee) => employee._id as Types.ObjectId,
+    );
+    const shiftAssignments =
+      payrollPolicy.dailyRateMethod === 'SCHEDULED_WORKDAYS'
+        ? await this.shiftsRepository.findAssignmentsForRange(
+            tenantObjectId,
+            employeeIds,
+            period.startDate,
+            period.endDate,
+          )
+        : [];
+    const presenceDaysByEmployee =
+      await this.attendanceRepository.countPresenceDaysByEmployee(
+        tenantObjectId,
+        employeeIds,
+        period.startDate,
+        period.endDate,
+      );
 
     const taxMode = companyConfig?.taxMode ?? TaxMode.FULL_DEDUCTION;
     const enableEmployeeSs = companyConfig?.enableEmployeeSs ?? true;
     const enableIncomeTax = companyConfig?.enableIncomeTax ?? true;
 
-    const { effectiveEmployeeSsRate, effectiveEmployerSsRate, applyIncomeTax, taxOnCompany, noDeduction } =
-      this.taxConfigsService.resolveEffectiveRates(
-        taxMode,
-        enableEmployeeSs,
-        enableIncomeTax,
-        taxConfig.employeeSsRate,
-        taxConfig.employerSsRate,
-      );
+    const {
+      effectiveEmployeeSsRate,
+      effectiveEmployerSsRate,
+      applyIncomeTax,
+      taxOnCompany,
+      noDeduction,
+    } = this.taxConfigsService.resolveEffectiveRates(
+      taxMode,
+      enableEmployeeSs,
+      enableIncomeTax,
+      taxConfig.employeeSsRate,
+      taxConfig.employerSsRate,
+    );
 
     const payslips = employees.map((employee) => {
       const empId = (employee._id as Types.ObjectId).toString();
@@ -137,15 +210,62 @@ export class PayrollService {
       // Rate-weighted hours: e.g. 2h holiday = 2 * 3.0 = 6 weighted hours at rate 1.0
       const otWeightedHours = otAmountByEmployee.get(empId) ?? 0;
 
-      const { leaveDeductionDays, leaveDeductionAmount } = this.calcLeaveDeduction(
-        employee.baseSalary ?? 0,
-        employee.employmentType,
-        leaveByEmployee.get(empId) ?? 0,
+      const approvedRestDays = payrollPolicy.restDayPolicyEnabled
+        ? (restDaysByEmployee.get(empId) ?? 0)
+        : 0;
+      const unusedRestDays = payrollPolicy.restDayPolicyEnabled
+        ? Math.max(0, payrollPolicy.monthlyRestDays - approvedRestDays)
+        : 0;
+      const scheduledDays = this.countScheduledDays(
+        payrollPolicy,
+        employee._id as Types.ObjectId,
+        period.startDate,
+        period.endDate,
+        shiftAssignments,
       );
+      const dailyDivisor =
+        payrollPolicy.dailyRateMethod === 'CALENDAR_30'
+          ? 30
+          : Math.max(1, scheduledDays);
+      const restDayCompensationAmount =
+        payrollPolicy.restDayPolicyEnabled &&
+        payrollPolicy.unusedRestDayCompensationEnabled
+          ? ((employee.baseSalary ?? 0) / dailyDivisor) * unusedRestDays
+          : 0;
 
+      const attendedDays = presenceDaysByEmployee.get(empId) ?? 0;
+      const paidLeaveDays = paidLeaveByEmployee.get(empId) ?? 0;
+      const payableDays = Math.min(
+        scheduledDays,
+        attendedDays + paidLeaveDays + approvedRestDays,
+      );
+      const absenceDays = Math.max(0, scheduledDays - payableDays);
+      const baseSalaryForPeriod =
+        payrollPolicy.salaryCalculationMode === 'ATTENDANCE_BASED'
+          ? ((employee.baseSalary ?? 0) / dailyDivisor) * payableDays
+          : (employee.baseSalary ?? 0);
+      const leaveDeductionDays =
+        payrollPolicy.salaryCalculationMode === 'MONTHLY_FIXED' &&
+        payrollPolicy.absenceDeductionEnabled
+          ? absenceDays
+          : 0;
+      const leaveDeductionAmount =
+        (baseSalaryForPeriod / dailyDivisor) * leaveDeductionDays;
+
+      const calculationAllowances = [
+        ...(employee.allowances ?? []),
+        ...(restDayCompensationAmount > 0
+          ? [
+              {
+                name: 'ຄ່າຊົດເຊີຍວັນພັກທີ່ບໍ່ໄດ້ໃຊ້',
+                amount: restDayCompensationAmount,
+              },
+            ]
+          : []),
+      ];
       const raw = this.taxCalculationService.calculatePayroll({
-        baseSalary: employee.baseSalary ?? 0,
-        allowances: employee.allowances ?? [],
+        baseSalary: baseSalaryForPeriod,
+        allowances: calculationAllowances,
         otHours: otWeightedHours,
         otType: 'weekday',
         otPolicy: { weekdayRate: 1.0, weekendRate: 1.0, holidayRate: 1.0 },
@@ -156,11 +276,17 @@ export class PayrollService {
         deductions: [],
       });
 
-      const adjusted = this.applyTaxModeAdjustments(raw, taxMode, taxOnCompany, noDeduction);
+      const adjusted = this.applyTaxModeAdjustments(
+        raw,
+        taxMode,
+        taxOnCompany,
+        noDeduction,
+      );
 
-      const otherDeductions = leaveDeductionAmount > 0
-        ? [{ name: 'ຫັກລາພັກ', amount: leaveDeductionAmount }]
-        : [];
+      const otherDeductions =
+        leaveDeductionAmount > 0
+          ? [{ name: 'ຫັກລາພັກ', amount: leaveDeductionAmount }]
+          : [];
 
       const totalDeductions = adjusted.totalDeductions + leaveDeductionAmount;
       const netSalary = adjusted.netSalary - leaveDeductionAmount;
@@ -181,10 +307,17 @@ export class PayrollService {
         totalDeductions,
         netSalary,
         employerSsAmount: adjusted.employerSsAmount,
-        taxConfigSnapshot: (taxConfig.toJSON ? taxConfig.toJSON() : taxConfig) as unknown as Record<string, unknown>,
+        taxConfigSnapshot: (taxConfig.toJSON
+          ? taxConfig.toJSON()
+          : taxConfig) as unknown as Record<string, unknown>,
         taxMode,
         leaveDeductionDays,
         leaveDeductionAmount,
+        approvedRestDays,
+        unusedRestDays,
+        restDayCompensationAmount,
+        payrollPolicySnapshot: policySnapshot(payrollPolicy),
+        adjustments: [],
       };
     });
 
@@ -195,31 +328,19 @@ export class PayrollService {
     });
   }
 
-  private calcLeaveDeduction(
-    baseSalary: number,
-    employmentType: string | undefined,
-    absenceDays: number,
-  ): { leaveDeductionDays: number; leaveDeductionAmount: number } {
-    if (employmentType === 'FULL_TIME' || absenceDays === 0) {
-      return { leaveDeductionDays: 0, leaveDeductionAmount: 0 };
-    }
-    const WORKING_DAYS_PER_MONTH = 22;
-    const dailyRate = baseSalary / WORKING_DAYS_PER_MONTH;
-    return {
-      leaveDeductionDays: absenceDays,
-      leaveDeductionAmount: dailyRate * absenceDays,
-    };
-  }
-
   private async resolveTaxConfig(tenantId: string) {
-    const companyConfig = await this.companyTaxConfigsRepository.findByTenant(tenantId);
+    const companyConfig =
+      await this.companyTaxConfigsRepository.findByTenant(tenantId);
 
     // Use taxConfigId from companyConfig if present, else fall back to global current
     const taxConfig = companyConfig?.taxConfigId
-      ? await this.taxConfigsRepository.findById(companyConfig.taxConfigId.toString())
+      ? await this.taxConfigsRepository.findById(
+          companyConfig.taxConfigId.toString(),
+        )
       : await this.taxConfigsRepository.findCurrent();
 
-    if (!taxConfig) throw new BadRequestException('No active tax configuration');
+    if (!taxConfig)
+      throw new BadRequestException('No active tax configuration');
     return { taxConfig, companyConfig };
   }
 
@@ -230,42 +351,181 @@ export class PayrollService {
     noDeduction: boolean,
   ): import('../tax-configs/tax-calculation.service').PayrollResult {
     if (noDeduction) {
-      return { ...result, employeeSsAmount: 0, incomeTax: 0, totalDeductions: 0, netSalary: result.grossSalary };
+      return {
+        ...result,
+        employeeSsAmount: 0,
+        incomeTax: 0,
+        totalDeductions: 0,
+        netSalary: result.grossSalary,
+      };
     }
     if (taxOnCompany) {
       // Tax is recorded but NOT deducted from employee net salary
       const deductionsWithoutTax = result.totalDeductions - result.incomeTax;
-      return { ...result, totalDeductions: deductionsWithoutTax, netSalary: result.grossSalary - deductionsWithoutTax };
+      return {
+        ...result,
+        totalDeductions: deductionsWithoutTax,
+        netSalary: result.grossSalary - deductionsWithoutTax,
+      };
     }
     // SS_ONLY: brackets were already passed as [] in calculatePayroll, so incomeTax = 0 naturally
     return result;
   }
 
+  /**
+   * @deprecated Alias for hrReviewPeriod() — kept for backward compat.
+   * Use POST /periods/:id/hr-review instead.
+   */
   async approvePeriod(tenantId: string, periodId: string, actorId: string) {
-    const tenantObjectId = new Types.ObjectId(tenantId);
-    const period = await this.payrollRepository.findPeriodById(periodId, tenantObjectId);
-    if (!period) throw new NotFoundException('Payroll period not found');
-    if (period.status !== 'GENERATED') throw new BadRequestException('Can only approve GENERATED period');
+    return this.hrReviewPeriod(tenantId, periodId, actorId);
+  }
 
+  async hrReviewPeriod(tenantId: string, periodId: string, actorId: string) {
+    const tenantObjectId = new Types.ObjectId(tenantId);
+    const period = await this.payrollRepository.findPeriodById(
+      periodId,
+      tenantObjectId,
+    );
+    if (!period) throw new NotFoundException('Payroll period not found');
+    if (period.status !== 'GENERATED') {
+      throw new BadRequestException('Can only review a GENERATED period');
+    }
+    await this.payrollRepository.updatePayslipStatuses(
+      tenantObjectId,
+      new Types.ObjectId(periodId),
+      'HR_REVIEWED',
+    );
     return this.payrollRepository.updatePeriod(periodId, tenantObjectId, {
-      status: 'APPROVED',
-      approvedBy: new Types.ObjectId(actorId),
+      status: 'HR_REVIEWED',
+      hrReviewedBy: new Types.ObjectId(actorId),
+      hrReviewedAt: new Date(),
     });
   }
 
+  async payPeriod(tenantId: string, periodId: string, actorId: string) {
+    const tenantObjectId = new Types.ObjectId(tenantId);
+    const period = await this.payrollRepository.findPeriodById(
+      periodId,
+      tenantObjectId,
+    );
+    if (!period) throw new NotFoundException('Payroll period not found');
+    if (period.status !== 'HR_REVIEWED') {
+      throw new BadRequestException('Can only pay an HR_REVIEWED period');
+    }
+    await this.payrollRepository.updatePayslipStatuses(
+      tenantObjectId,
+      new Types.ObjectId(periodId),
+      'PAID',
+    );
+    return this.payrollRepository.updatePeriod(periodId, tenantObjectId, {
+      status: 'PAID',
+      paidBy: new Types.ObjectId(actorId),
+      paidAt: new Date(),
+    });
+  }
+
+  async updatePayslipAdjustments(
+    tenantId: string,
+    payslipId: string,
+    actorId: string,
+    dto: UpdatePayslipAdjustmentsDto,
+  ) {
+    const tenantObjectId = new Types.ObjectId(tenantId);
+    const payslip = await this.payrollRepository.findPayslipById(
+      payslipId,
+      tenantObjectId,
+    );
+    if (!payslip) throw new NotFoundException('Payslip not found');
+    const period = await this.payrollRepository.findPeriodById(
+      payslip.payrollPeriodId.toString(),
+      tenantObjectId,
+    );
+    if (!period || period.status !== 'GENERATED') {
+      throw new BadRequestException(
+        'Adjustments can only be edited during GENERATED review',
+      );
+    }
+
+    const previousAdditions = (payslip.adjustments ?? [])
+      .filter((item) => item.kind === 'ADDITION')
+      .reduce((sum, item) => sum + item.amount, 0);
+    const previousDeductions = (payslip.adjustments ?? [])
+      .filter((item) => item.kind === 'DEDUCTION')
+      .reduce((sum, item) => sum + item.amount, 0);
+    const additions = dto.adjustments
+      .filter((item) => item.kind === 'ADDITION')
+      .reduce((sum, item) => sum + item.amount, 0);
+    const deductions = dto.adjustments
+      .filter((item) => item.kind === 'DEDUCTION')
+      .reduce((sum, item) => sum + item.amount, 0);
+    const systemGross = payslip.grossSalary - previousAdditions;
+    const systemDeductions = payslip.totalDeductions - previousDeductions;
+    const grossSalary = systemGross + additions;
+    const totalDeductions = systemDeductions + deductions;
+
+    return this.payrollRepository.updatePayslip(payslipId, tenantObjectId, {
+      adjustments: dto.adjustments.map((item) => ({
+        ...item,
+        source: 'MANUAL' as const,
+        createdBy: new Types.ObjectId(actorId),
+        createdAt: new Date(),
+      })),
+      grossSalary,
+      totalDeductions,
+      netSalary: grossSalary - totalDeductions,
+    });
+  }
+
+  private countScheduledDays(
+    policy: Awaited<ReturnType<CompanyPoliciesService['getEffectivePolicy']>>,
+    employeeId: Types.ObjectId,
+    startDate: Date,
+    endDate: Date,
+    assignments: Array<{
+      employeeId: Types.ObjectId;
+      effectiveDate: Date;
+      endDate?: Date;
+      shiftId: unknown;
+    }>,
+  ) {
+    let count = 0;
+    for (
+      const cursor = startOfUtcDay(startDate);
+      cursor <= endDate;
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
+    ) {
+      let workDays = policy.uniformSchedule.workDays;
+      if (policy.workScheduleMode === 'SHIFT_BASED') {
+        const assignment = assignments.find(
+          (item) =>
+            item.employeeId.toString() === employeeId.toString() &&
+            item.effectiveDate <= cursor &&
+            (!item.endDate || item.endDate >= cursor),
+        );
+        const shift = assignment?.shiftId as
+          | { workDays?: number[] }
+          | undefined;
+        workDays = shift?.workDays ?? [];
+      }
+      if (workDays.includes(cursor.getUTCDay())) count += 1;
+    }
+    return count;
+  }
+
+  /**
+   * @deprecated Alias for payPeriod() — kept for backward compat.
+   * Use POST /periods/:id/pay instead.
+   */
   async lockPeriod(tenantId: string, periodId: string, actorId: string) {
-    const tenantObjectId = new Types.ObjectId(tenantId);
-    const period = await this.payrollRepository.findPeriodById(periodId, tenantObjectId);
-    if (!period) throw new NotFoundException('Payroll period not found');
-    if (period.status !== 'APPROVED') throw new BadRequestException('Can only lock APPROVED period');
-
-    return this.payrollRepository.updatePeriod(periodId, tenantObjectId, {
-      status: 'LOCKED',
-      lockedBy: new Types.ObjectId(actorId),
-    });
+    return this.payPeriod(tenantId, periodId, actorId);
   }
 
-  async getPeriodPayslips(tenantId: string, periodId: string, page = 1, limit = 20) {
+  async getPeriodPayslips(
+    tenantId: string,
+    periodId: string,
+    page = 1,
+    limit = 20,
+  ) {
     const tenantObjectId = new Types.ObjectId(tenantId);
     const safeLimit = Math.min(MAX_LIMIT, limit);
     const { items, total } = await this.payrollRepository.findPayslipsByPeriod(
@@ -274,12 +534,23 @@ export class PayrollService {
       page,
       safeLimit,
     );
-    return { data: items, meta: { page, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } };
+    return {
+      data: items,
+      meta: {
+        page,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
   }
 
   async getPayslipById(tenantId: string, payslipId: string) {
     const tenantObjectId = new Types.ObjectId(tenantId);
-    const payslip = await this.payrollRepository.findPayslipByIdWithPopulate(payslipId, tenantObjectId);
+    const payslip = await this.payrollRepository.findPayslipByIdWithPopulate(
+      payslipId,
+      tenantObjectId,
+    );
     if (!payslip) throw new NotFoundException('Payslip not found');
     return payslip;
   }
@@ -289,12 +560,16 @@ export class PayrollService {
     const safeLimit = Math.min(MAX_LIMIT, limit);
 
     const { employees } = await this.employeesRepository.findPaginated(
-      { tenantId: tenantObjectId, userId: new Types.ObjectId(userId) } as unknown as Parameters<EmployeesRepository['findPaginated']>[0],
+      {
+        tenantId: tenantObjectId,
+        userId: new Types.ObjectId(userId),
+      } as unknown as Parameters<EmployeesRepository['findPaginated']>[0],
       1,
       1,
       '-createdAt',
     );
-    if (!employees[0]) throw new NotFoundException('Employee profile not found');
+    if (!employees[0])
+      throw new NotFoundException('Employee profile not found');
 
     const { items, total } = await this.payrollRepository.findMyPayslips(
       tenantObjectId,
@@ -302,24 +577,42 @@ export class PayrollService {
       page,
       safeLimit,
     );
-    return { data: items, meta: { page, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } };
+    return {
+      data: items,
+      meta: {
+        page,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
   }
 
   async getMyPayslip(tenantId: string, userId: string, payslipId: string) {
     const tenantObjectId = new Types.ObjectId(tenantId);
 
     const { employees } = await this.employeesRepository.findPaginated(
-      { tenantId: tenantObjectId, userId: new Types.ObjectId(userId) } as unknown as Parameters<EmployeesRepository['findPaginated']>[0],
+      {
+        tenantId: tenantObjectId,
+        userId: new Types.ObjectId(userId),
+      } as unknown as Parameters<EmployeesRepository['findPaginated']>[0],
       1,
       1,
       '-createdAt',
     );
-    if (!employees[0]) throw new NotFoundException('Employee profile not found');
+    if (!employees[0])
+      throw new NotFoundException('Employee profile not found');
 
-    const payslip = await this.payrollRepository.findPayslipById(payslipId, tenantObjectId);
+    const payslip = await this.payrollRepository.findPayslipById(
+      payslipId,
+      tenantObjectId,
+    );
     if (!payslip) throw new NotFoundException('Payslip not found');
 
-    if (payslip.employeeId.toString() !== (employees[0]._id as Types.ObjectId).toString()) {
+    if (
+      payslip.employeeId.toString() !==
+      (employees[0]._id as Types.ObjectId).toString()
+    ) {
       throw new ForbiddenException('Access denied');
     }
 
@@ -350,7 +643,11 @@ export class PayrollService {
       const { employees } = await this.employeesRepository.findPaginated(
         {
           tenantId: tenantObjectId,
-          $or: [{ firstName: nameRegex }, { lastName: nameRegex }, { employeeCode: nameRegex }],
+          $or: [
+            { firstName: nameRegex },
+            { lastName: nameRegex },
+            { employeeCode: nameRegex },
+          ],
         } as unknown as Parameters<EmployeesRepository['findPaginated']>[0],
         1,
         100,
@@ -358,22 +655,44 @@ export class PayrollService {
       );
       employeeIds = employees.map((e) => e._id as Types.ObjectId);
       if (employeeIds.length === 0) {
-        return { data: [], meta: { page, limit: safeLimit, total: 0, totalPages: 0 } };
+        return {
+          data: [],
+          meta: { page, limit: safeLimit, total: 0, totalPages: 0 },
+        };
       }
     }
 
-    const { data, total } = await this.payrollRepository.findAllPayslipsPaginated(
-      tenantObjectId,
-      { periodId: query.periodId, status: query.status, employeeIds, startDate: query.startDate, endDate: query.endDate },
-      page,
-      safeLimit,
-      sort,
-    );
+    const { data, total } =
+      await this.payrollRepository.findAllPayslipsPaginated(
+        tenantObjectId,
+        {
+          periodId: query.periodId,
+          status: query.status,
+          employeeIds,
+          startDate: query.startDate,
+          endDate: query.endDate,
+        },
+        page,
+        safeLimit,
+        sort,
+      );
 
-    return { data, meta: { page, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } };
+    return {
+      data,
+      meta: {
+        page,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
   }
 
-  async getEmployeePayslips(tenantId: string, employeeId: string, query: { page?: number; limit?: number }) {
+  async getEmployeePayslips(
+    tenantId: string,
+    employeeId: string,
+    query: { page?: number; limit?: number },
+  ) {
     const tenantObjectId = new Types.ObjectId(tenantId);
     const page = query.page ?? 1;
     const safeLimit = Math.min(MAX_LIMIT, query.limit ?? 20);
@@ -385,7 +704,15 @@ export class PayrollService {
       safeLimit,
     );
 
-    return { data, meta: { page, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } };
+    return {
+      data,
+      meta: {
+        page,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
   }
 
   async getEmployeeFinanceSummary(tenantId: string, employeeId: string) {
@@ -394,6 +721,33 @@ export class PayrollService {
       new Types.ObjectId(employeeId),
     );
     return summary;
+  }
+
+  async getPayrollPolicy(tenantId: string) {
+    return this.companyPoliciesService.getEffectivePolicy(tenantId);
+  }
+
+  async updatePayrollPolicy(
+    tenantId: string,
+    actorId: string,
+    actorRole: string,
+    dto: UpdatePayrollPolicyDto,
+  ) {
+    // Merge only the 3 TOR-defined fields on top of the current policy
+    const current = await this.companyPoliciesService.getEffectivePolicy(tenantId);
+    const merged: FullUpdatePayrollPolicyDto = {
+      salaryCalculationMode: current.salaryCalculationMode,
+      dailyRateMethod: current.dailyRateMethod,
+      restDayPolicyEnabled: dto.restDayPolicyEnabled ?? current.restDayPolicyEnabled,
+      monthlyRestDays: dto.monthlyRestDays ?? current.monthlyRestDays,
+      unusedRestDayCompensationEnabled:
+        dto.unusedRestDayCompensationEnabled ?? current.unusedRestDayCompensationEnabled,
+      unusedRestDaysCarryForward: current.unusedRestDaysCarryForward ?? false,
+      lateToleranceMinutes: current.lateToleranceMinutes ?? 15,
+      earlyLeaveToleranceMinutes: current.earlyLeaveToleranceMinutes ?? 0,
+      absenceDeductionEnabled: current.absenceDeductionEnabled ?? false,
+    };
+    return this.companyPoliciesService.updatePayrollPolicy(tenantId, actorId, actorRole, merged);
   }
 
   async getReport(tenantId: string, periodId?: string) {
@@ -406,4 +760,17 @@ export class PayrollService {
     );
     return { periodId, ...report };
   }
+}
+
+function startOfUtcDay(date: Date) {
+  const result = new Date(date);
+  result.setUTCHours(0, 0, 0, 0);
+  return result;
+}
+
+function policySnapshot(policy: unknown): Record<string, unknown> {
+  if (policy && typeof policy === 'object' && 'toObject' in policy) {
+    return (policy as { toObject: () => Record<string, unknown> }).toObject();
+  }
+  return { ...(policy as Record<string, unknown>) };
 }
