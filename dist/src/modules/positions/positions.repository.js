@@ -1,0 +1,59 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PositionsRepository = void 0;
+const common_1 = require("@nestjs/common");
+const mongoose_1 = require("@nestjs/mongoose");
+const mongoose_2 = require("mongoose");
+const position_schema_1 = require("./schemas/position.schema");
+let PositionsRepository = class PositionsRepository {
+    positionModel;
+    constructor(positionModel) {
+        this.positionModel = positionModel;
+    }
+    async create(tenantId, dto) {
+        return this.positionModel.create({ ...dto, tenantId });
+    }
+    async findById(id, tenantId) {
+        return this.positionModel.findOne({ _id: id, tenantId }).exec();
+    }
+    async findPaginated(tenantId, page, limit, sort) {
+        const skip = (page - 1) * limit;
+        const sortOrder = sort.startsWith('-') ? -1 : 1;
+        const sortField = sort.replace(/^-/, '');
+        const query = { tenantId };
+        const [positions, total] = await Promise.all([
+            this.positionModel.find(query).sort({ [sortField]: sortOrder }).skip(skip).limit(limit).exec(),
+            this.positionModel.countDocuments(query).exec(),
+        ]);
+        return { positions, total };
+    }
+    async update(id, tenantId, dto) {
+        return this.positionModel
+            .findOneAndUpdate({ _id: id, tenantId }, dto, { returnDocument: 'after' })
+            .exec();
+    }
+    async softDelete(id, tenantId) {
+        return this.positionModel
+            .findOneAndUpdate({ _id: id, tenantId }, { isActive: false }, { returnDocument: 'after' })
+            .exec();
+    }
+};
+exports.PositionsRepository = PositionsRepository;
+exports.PositionsRepository = PositionsRepository = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(position_schema_1.Position.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model])
+], PositionsRepository);
+//# sourceMappingURL=positions.repository.js.map

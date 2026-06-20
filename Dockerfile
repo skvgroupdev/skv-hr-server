@@ -1,23 +1,14 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 
 RUN npm install -g pnpm
 
 WORKDIR /app
 
 COPY pnpm-lock.yaml package.json ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --prod
 
-COPY . .
-RUN pnpm run build
-
-# Stage 2: Run
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
+COPY dist ./dist
+COPY package.json ./
 
 USER node
 
