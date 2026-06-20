@@ -12,4 +12,4 @@ COPY package.json ./
 
 USER node
 
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main"]
