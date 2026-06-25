@@ -123,6 +123,24 @@ let LeaveRepository = class LeaveRepository {
         })
             .exec();
     }
+    findTodayActive(tenantId, date) {
+        const start = new Date(date);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(date);
+        end.setHours(23, 59, 59, 999);
+        return this.requestModel
+            .find({
+            tenantId,
+            status: { $in: ['PENDING', 'APPROVED'] },
+            startDate: { $lte: end },
+            endDate: { $gte: start },
+        })
+            .select('employeeId status leaveTypeId')
+            .populate('leaveTypeId', 'name')
+            .populate('employeeId', 'firstName lastName employeeCode')
+            .lean()
+            .exec();
+    }
     async findReport(tenantId, filter, page, limit) {
         const skip = (page - 1) * limit;
         const query = { tenantId, ...filter };

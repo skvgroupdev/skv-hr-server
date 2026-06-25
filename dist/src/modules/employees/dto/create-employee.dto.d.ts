@@ -36,6 +36,6 @@ export declare class CreateEmployeeDto {
     bankAccount?: string;
     paymentMethod?: string;
     role?: 'HR_ADMIN' | 'BRANCH_MANAGER' | 'SUPERVISOR' | 'STAFF';
-    initialPassword?: string;
+    initialPassword: string;
 }
 export {};

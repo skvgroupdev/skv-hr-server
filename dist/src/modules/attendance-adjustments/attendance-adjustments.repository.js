@@ -45,6 +45,17 @@ let AttendanceAdjustmentsRepository = class AttendanceAdjustmentsRepository {
             .sort({ createdAt: -1 })
             .exec();
     }
+    findTodayActive(tenantId, date) {
+        const start = new Date(date);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(date);
+        end.setHours(23, 59, 59, 999);
+        return this.model
+            .find({ tenantId, workDate: { $gte: start, $lte: end }, status: { $in: ['PENDING', 'APPROVED'] } })
+            .populate('employeeId', 'firstName lastName employeeCode')
+            .sort({ createdAt: -1 })
+            .exec();
+    }
     update(id, tenantId, data) {
         return this.model
             .findOneAndUpdate({ _id: id, tenantId }, data, {

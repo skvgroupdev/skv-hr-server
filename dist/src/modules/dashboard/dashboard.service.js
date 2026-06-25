@@ -18,6 +18,10 @@ let DashboardService = class DashboardService {
     constructor(dashboardRepository) {
         this.dashboardRepository = dashboardRepository;
     }
+    async getTodayOverview(currentUser) {
+        const tenantId = new mongoose_1.Types.ObjectId(currentUser.companyId);
+        return this.dashboardRepository.getTodayOverview(tenantId, new Date());
+    }
     async getPendingCounts(currentUser) {
         const tenantId = new mongoose_1.Types.ObjectId(currentUser.companyId);
         return this.dashboardRepository.countPendingRequests(tenantId);

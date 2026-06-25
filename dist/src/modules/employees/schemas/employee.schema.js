@@ -45,6 +45,7 @@ let Employee = class Employee {
     bankAccount;
     paymentMethod;
     userId;
+    isDeleted;
 };
 exports.Employee = Employee;
 __decorate([
@@ -196,6 +197,10 @@ __decorate([
     (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User', default: null }),
     __metadata("design:type", Object)
 ], Employee.prototype, "userId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], Employee.prototype, "isDeleted", void 0);
 exports.Employee = Employee = __decorate([
     (0, mongoose_1.Schema)({
         timestamps: true,

@@ -8,6 +8,11 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 export class DashboardService {
   constructor(private readonly dashboardRepository: DashboardRepository) {}
 
+  async getTodayOverview(currentUser: JwtPayload) {
+    const tenantId = new Types.ObjectId(currentUser.companyId!);
+    return this.dashboardRepository.getTodayOverview(tenantId, new Date());
+  }
+
   async getPendingCounts(currentUser: JwtPayload): Promise<{ leave: number; ot: number; outsideWork: number }> {
     const tenantId = new Types.ObjectId(currentUser.companyId!);
     return this.dashboardRepository.countPendingRequests(tenantId);

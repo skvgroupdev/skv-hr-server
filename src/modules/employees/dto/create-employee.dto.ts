@@ -10,6 +10,8 @@ import {
   IsUrl,
   Min,
   IsPhoneNumber,
+  MinLength,
+  IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -153,8 +155,9 @@ export class CreateEmployeeDto {
   @IsEnum(['HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR', 'STAFF'])
   role?: 'HR_ADMIN' | 'BRANCH_MANAGER' | 'SUPERVISOR' | 'STAFF';
 
-  // Auto-create user account
-  @IsOptional()
+  // Auto-create user account — required so employees can always log in
+  @IsNotEmpty({ message: 'กรุณาระบุรหัสผ่าน' })
   @IsString()
-  initialPassword?: string;
+  @MinLength(6, { message: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' })
+  initialPassword: string;
 }

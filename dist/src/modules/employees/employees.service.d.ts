@@ -10,6 +10,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 export declare class EmployeesService {
     private readonly employeesRepository;
@@ -45,6 +46,9 @@ export declare class EmployeesService {
     } & {
         id: string;
     }) | null>;
+    softDelete(currentUser: JwtPayload, id: string): Promise<{
+        message: string;
+    }>;
     reactivate(currentUser: JwtPayload, id: string): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/employee.schema").Employee, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/employee.schema").Employee & {
         _id: Types.ObjectId;
     } & {
@@ -64,6 +68,9 @@ export declare class EmployeesService {
         role: string;
     }>;
     updateMyProfile(currentUser: JwtPayload, dto: UpdateMyProfileDto): Promise<Record<string, unknown>>;
+    changePassword(currentUser: JwtPayload, employeeId: string, dto: ChangePasswordDto): Promise<{
+        message: string;
+    }>;
     getDocuments(currentUser: JwtPayload, id: string): Promise<(import("mongoose").Document<unknown, {}, import("../documents/schemas/document.schema").DocumentRecord, {}, import("mongoose").DefaultSchemaOptions> & import("../documents/schemas/document.schema").DocumentRecord & {
         _id: Types.ObjectId;
     } & {

@@ -151,6 +151,9 @@ export class Employee {
   // System
   @Prop({ type: Types.ObjectId, ref: 'User', default: null })
   userId: Types.ObjectId | null;
+
+  @Prop({ type: Boolean, default: false })
+  isDeleted: boolean;
 }
 
 export const EmployeeSchema = SchemaFactory.createForClass(Employee);

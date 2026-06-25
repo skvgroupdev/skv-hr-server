@@ -40,6 +40,7 @@ export declare class LeaveRepository {
     findPendingRequests(tenantId: Types.ObjectId): Promise<LeaveRequestDocument[]>;
     updateRequest(id: string, tenantId: Types.ObjectId, data: Partial<LeaveRequest>): Promise<LeaveRequestDocument | null>;
     findOverlapping(tenantId: Types.ObjectId, employeeId: Types.ObjectId, startDate: Date, endDate: Date): Promise<LeaveRequestDocument | null>;
+    findTodayActive(tenantId: Types.ObjectId, date: Date): Promise<LeaveRequestDocument[]>;
     findReport(tenantId: Types.ObjectId, filter: Record<string, unknown>, page: number, limit: number): Promise<{
         items: (import("mongoose").Document<unknown, {}, import("mongoose").Document<unknown, {}, LeaveRequest, {}, import("mongoose").DefaultSchemaOptions> & LeaveRequest & {
             _id: Types.ObjectId;

@@ -43,6 +43,7 @@ export declare class Employee {
     bankAccount?: string;
     paymentMethod?: string;
     userId: Types.ObjectId | null;
+    isDeleted: boolean;
 }
 export declare const EmployeeSchema: import("mongoose").Schema<Employee, import("mongoose").Model<Employee, any, any, any, any, any, Employee>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Employee, import("mongoose").Document<unknown, {}, Employee, {
     id: string;
@@ -340,6 +341,15 @@ export declare const EmployeeSchema: import("mongoose").Schema<Employee, import(
         id: string;
     }> | undefined;
     userId?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId | null, Employee, import("mongoose").Document<unknown, {}, Employee, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Employee & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    isDeleted?: import("mongoose").SchemaDefinitionProperty<boolean, Employee, import("mongoose").Document<unknown, {}, Employee, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Employee & {
         _id: Types.ObjectId;

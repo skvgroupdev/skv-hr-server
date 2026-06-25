@@ -4,6 +4,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 declare class ChangeRoleDto {
     role: 'HR_ADMIN' | 'BRANCH_MANAGER' | 'SUPERVISOR' | 'STAFF';
@@ -42,6 +43,11 @@ export declare class EmployeesController {
         message: string;
         role: string;
     }>;
+    softDelete(id: string, user: JwtPayload): Promise<{
+        data: {
+            message: string;
+        };
+    }>;
     deactivate(id: string, user: JwtPayload): Promise<{
         data: (import("mongoose").Document<unknown, {}, import("./schemas/employee.schema").Employee, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/employee.schema").Employee & {
             _id: import("mongoose").Types.ObjectId;
@@ -77,6 +83,11 @@ export declare class EmployeesController {
         } & {
             id: string;
         })[];
+    }>;
+    changePassword(id: string, dto: ChangePasswordDto, user: JwtPayload): Promise<{
+        data: {
+            message: string;
+        };
     }>;
 }
 export {};

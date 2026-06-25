@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Types } from 'mongoose';
@@ -22,6 +23,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 const BCRYPT_ROUNDS = 12;
@@ -219,8 +221,7 @@ export class EmployeesService {
     const assignedRole = dto.role ?? 'STAFF';
     assertCanAssignRole(currentUser.role, assignedRole);
 
-    const rawPassword =
-      dto.initialPassword ?? Math.random().toString(36).slice(-8);
+    const rawPassword = dto.initialPassword;
     const hashedPassword = await bcrypt.hash(rawPassword, BCRYPT_ROUNDS);
 
     const alreadyHasUser = await this.usersRepository.existsByPhoneAndCompany(
@@ -380,7 +381,10 @@ export class EmployeesService {
 
     // sync linked user account
     if (existing.userId) {
-      const userId = existing.userId.toString();
+      const rawUid = existing.userId as unknown as { _id?: Types.ObjectId } | Types.ObjectId | string;
+      const userId = typeof rawUid === 'object' && '_id' in rawUid
+        ? (rawUid._id as Types.ObjectId).toString()
+        : rawUid.toString();
       if (dto.phone && dto.phone !== existing.phone) {
         await this.usersRepository.updatePhone(userId, dto.phone);
       }
@@ -439,6 +443,27 @@ export class EmployeesService {
     });
 
     return updated;
+  }
+
+  async softDelete(currentUser: JwtPayload, id: string) {
+    const tenantObjectId = new Types.ObjectId(currentUser.companyId!);
+    const existing = await this.employeesRepository.findById(id, tenantObjectId);
+    if (!existing) throw new NotFoundException('Employee not found');
+
+    await this.employeesRepository.softDelete(id, tenantObjectId);
+
+    await this.auditLogService.log({
+      tenantId: tenantObjectId,
+      actorId: currentUser.sub,
+      actorRole: currentUser.role,
+      action: 'DELETE_EMPLOYEE',
+      module: 'employees',
+      targetId: new Types.ObjectId(id),
+      before: { firstName: existing.firstName, lastName: existing.lastName },
+      after: { isDeleted: true },
+    });
+
+    return { message: 'Employee deleted successfully' };
   }
 
   async reactivate(currentUser: JwtPayload, id: string) {
@@ -509,7 +534,10 @@ export class EmployeesService {
     if (!employee.userId)
       throw new ForbiddenException('Employee has no linked user account');
 
-    const userId = employee.userId.toString();
+    const rawUidRole = employee.userId as unknown as { _id?: Types.ObjectId } | Types.ObjectId | string;
+    const userId = typeof rawUidRole === 'object' && '_id' in rawUidRole
+      ? (rawUidRole._id as Types.ObjectId).toString()
+      : rawUidRole.toString();
     await this.usersRepository.updateRole(userId, newRole);
 
     await this.auditLogService.log({
@@ -537,6 +565,56 @@ export class EmployeesService {
 
     if (!updated) throw new NotFoundException('Employee profile not found');
     return toEmployeeResponse(updated);
+  }
+
+  async changePassword(
+    currentUser: JwtPayload,
+    employeeId: string,
+    dto: ChangePasswordDto,
+  ) {
+    const tenantObjectId = new Types.ObjectId(currentUser.companyId!);
+
+    const employee = await this.employeesRepository.findById(employeeId, tenantObjectId);
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    if (!employee.userId) {
+      throw new ForbiddenException('Employee has no linked user account');
+    }
+
+    const rawUserId = employee.userId as unknown as { _id?: Types.ObjectId } | Types.ObjectId | string;
+    const userId = typeof rawUserId === 'object' && '_id' in rawUserId
+      ? (rawUserId._id as Types.ObjectId).toString()
+      : rawUserId.toString();
+
+    // STAFF can only change their own password
+    if (currentUser.role === 'STAFF' && userId !== currentUser.sub) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const userWithPassword = await this.usersRepository.findByIdWithSensitive(userId);
+    if (!userWithPassword) throw new NotFoundException('User account not found');
+
+    // STAFF ต้องตรวจสอบ currentPassword, HR/Admin ข้ามได้
+    const isStaff = currentUser.role === 'STAFF';
+    if (isStaff) {
+      if (!dto.currentPassword) throw new BadRequestException('กรุณาระบุรหัสผ่านปัจจุบัน');
+      const isPasswordCorrect = await bcrypt.compare(dto.currentPassword, userWithPassword.password);
+      if (!isPasswordCorrect) throw new BadRequestException('รหัสผ่านปัจจุบันไม่ถูกต้อง');
+    }
+
+    const hashedNewPassword = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
+    await this.usersRepository.updatePassword(userId, hashedNewPassword);
+
+    await this.auditLogService.log({
+      tenantId: tenantObjectId,
+      actorId: currentUser.sub,
+      actorRole: currentUser.role,
+      action: 'CHANGE_PASSWORD',
+      module: 'employees',
+      targetId: new Types.ObjectId(employeeId),
+    });
+
+    return { message: 'Password changed successfully' };
   }
 
   async getDocuments(currentUser: JwtPayload, id: string) {

@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -17,6 +18,7 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { EmployeeQueryDto } from './dto/employee-query.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -79,6 +81,14 @@ export class EmployeesController {
     return this.employeesService.changeRole(user, id, dto.role);
   }
 
+  @Delete(':id')
+  @Roles('COMPANY_OWNER', 'HR_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  async softDelete(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    const result = await this.employeesService.softDelete(user, id);
+    return { data: result };
+  }
+
   @Post(':id/deactivate')
   @Roles('COMPANY_OWNER', 'HR_ADMIN')
   @HttpCode(HttpStatus.OK)
@@ -111,5 +121,15 @@ export class EmployeesController {
   async getDocuments(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     const documents = await this.employeesService.getDocuments(user, id);
     return { data: documents };
+  }
+
+  @Patch(':id/password')
+  async changePassword(
+    @Param('id') id: string,
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const result = await this.employeesService.changePassword(user, id, dto);
+    return { data: result };
   }
 }

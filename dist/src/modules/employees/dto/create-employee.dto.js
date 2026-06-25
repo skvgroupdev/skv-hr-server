@@ -217,8 +217,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateEmployeeDto.prototype, "role", void 0);
 __decorate([
-    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNotEmpty)({ message: 'กรุณาระบุรหัสผ่าน' }),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MinLength)(6, { message: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' }),
     __metadata("design:type", String)
 ], CreateEmployeeDto.prototype, "initialPassword", void 0);
 //# sourceMappingURL=create-employee.dto.js.map

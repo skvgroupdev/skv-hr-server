@@ -51,12 +51,25 @@ export class EmployeesRepository {
     return this.employeeModel.create(data);
   }
 
+  async softDelete(
+    id: string,
+    tenantId: Types.ObjectId,
+  ): Promise<EmployeeDocument | null> {
+    return this.employeeModel
+      .findOneAndUpdate(
+        { _id: id, tenantId, isDeleted: { $ne: true } },
+        { isDeleted: true },
+        { returnDocument: 'after' },
+      )
+      .exec();
+  }
+
   async findById(
     id: string,
     tenantId: Types.ObjectId,
   ): Promise<EmployeeDocument | null> {
     return this.employeeModel
-      .findOne({ _id: id, tenantId })
+      .findOne({ _id: id, tenantId, isDeleted: { $ne: true } })
       .populate('branchId', 'name')
       .populate('departmentId', 'name')
       .populate('positionId', 'name')
@@ -76,7 +89,7 @@ export class EmployeesRepository {
 
     // Cast to any to allow dynamic filter with $or/$and operators
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mongoFilter = filter as any;
+    const mongoFilter = { ...filter, isDeleted: { $ne: true } } as any;
 
     const [employees, total] = await Promise.all([
       this.employeeModel
@@ -142,7 +155,7 @@ export class EmployeesRepository {
 
   async findByUserId(userId: Types.ObjectId): Promise<EmployeeDocument | null> {
     return this.employeeModel
-      .findOne({ userId })
+      .findOne({ userId, isDeleted: { $ne: true } })
       .select(
         'employeeCode firstName lastName email photoUrl bankName bankAccount employmentType startDate status branchId departmentId positionId',
       )
@@ -157,7 +170,7 @@ export class EmployeesRepository {
     tenantId: Types.ObjectId,
   ): Promise<EmployeeDocument | null> {
     return this.employeeModel
-      .findOne({ userId, tenantId })
+      .findOne({ userId, tenantId, isDeleted: { $ne: true } })
       .populate('branchId', 'name')
       .populate('departmentId', 'name')
       .populate('positionId', 'name')
@@ -170,7 +183,7 @@ export class EmployeesRepository {
     data: Partial<Record<string, unknown>>,
   ): Promise<EmployeeDocument | null> {
     return this.employeeModel
-      .findOneAndUpdate({ userId, tenantId }, data, { returnDocument: 'after' })
+      .findOneAndUpdate({ userId, tenantId, isDeleted: { $ne: true } }, data, { returnDocument: 'after' })
       .populate('branchId', 'name')
       .populate('departmentId', 'name')
       .populate('positionId', 'name')
@@ -183,7 +196,7 @@ export class EmployeesRepository {
     tenantId: Types.ObjectId,
   ): Promise<EmployeeDocument | null> {
     return this.employeeModel
-      .findOne({ userId, tenantId })
+      .findOne({ userId, tenantId, isDeleted: { $ne: true } })
       .select(
         'employeeCode firstName lastName status branchId managerId supervisorId userId',
       )
@@ -194,6 +207,7 @@ export class EmployeesRepository {
     return this.employeeModel
       .countDocuments({
         tenantId,
+        isDeleted: { $ne: true },
         status: { $nin: ['RESIGNED', 'TERMINATED'] },
       })
       .exec();
@@ -206,6 +220,7 @@ export class EmployeesRepository {
     return this.employeeModel
       .countDocuments({
         tenantId,
+        isDeleted: { $ne: true },
         status: 'ACTIVE',
         ...(branchId ? { branchId } : {}),
       })
@@ -220,6 +235,7 @@ export class EmployeesRepository {
       .find({
         _id: { $in: ids.map((id) => new Types.ObjectId(id)) },
         tenantId,
+        isDeleted: { $ne: true },
       })
       .select('firstName lastName employeeCode positionId departmentId')
       .populate('positionId', 'name')
@@ -231,7 +247,7 @@ export class EmployeesRepository {
     tenantId: Types.ObjectId,
     branchId?: Types.ObjectId,
   ): Promise<EmployeeDocument[]> {
-    const filter: Record<string, unknown> = { tenantId, status: 'ACTIVE' };
+    const filter: Record<string, unknown> = { tenantId, status: 'ACTIVE', isDeleted: { $ne: true } };
     if (branchId) filter.branchId = branchId;
     return this.employeeModel
       .find(filter)
@@ -259,6 +275,6 @@ export class EmployeesRepository {
     tenantId: Types.ObjectId,
     employeeCode: string,
   ): Promise<EmployeeDocument | null> {
-    return this.employeeModel.findOne({ tenantId, employeeCode }).exec();
+    return this.employeeModel.findOne({ tenantId, employeeCode, isDeleted: { $ne: true } }).exec();
   }
 }

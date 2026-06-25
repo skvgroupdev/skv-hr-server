@@ -21,6 +21,7 @@ const update_employee_dto_1 = require("./dto/update-employee.dto");
 const update_my_profile_dto_1 = require("./dto/update-my-profile.dto");
 const employee_query_dto_1 = require("./dto/employee-query.dto");
 const upload_document_dto_1 = require("./dto/upload-document.dto");
+const change_password_dto_1 = require("./dto/change-password.dto");
 const roles_decorator_1 = require("../../common/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
 const roles_guard_1 = require("../../common/guards/roles.guard");
@@ -58,6 +59,10 @@ let EmployeesController = class EmployeesController {
     changeRole(user, id, dto) {
         return this.employeesService.changeRole(user, id, dto.role);
     }
+    async softDelete(id, user) {
+        const result = await this.employeesService.softDelete(user, id);
+        return { data: result };
+    }
     async deactivate(id, user) {
         const employee = await this.employeesService.deactivate(user, id);
         return { data: employee };
@@ -73,6 +78,10 @@ let EmployeesController = class EmployeesController {
     async getDocuments(id, user) {
         const documents = await this.employeesService.getDocuments(user, id);
         return { data: documents };
+    }
+    async changePassword(id, dto, user) {
+        const result = await this.employeesService.changePassword(user, id, dto);
+        return { data: result };
     }
 };
 exports.EmployeesController = EmployeesController;
@@ -132,6 +141,16 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], EmployeesController.prototype, "changeRole", null);
 __decorate([
+    (0, common_1.Delete)(':id'),
+    (0, roles_decorator_1.Roles)('COMPANY_OWNER', 'HR_ADMIN'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], EmployeesController.prototype, "softDelete", null);
+__decorate([
     (0, common_1.Post)(':id/deactivate'),
     (0, roles_decorator_1.Roles)('COMPANY_OWNER', 'HR_ADMIN'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
@@ -170,6 +189,15 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], EmployeesController.prototype, "getDocuments", null);
+__decorate([
+    (0, common_1.Patch)(':id/password'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, change_password_dto_1.ChangePasswordDto, Object]),
+    __metadata("design:returntype", Promise)
+], EmployeesController.prototype, "changePassword", null);
 exports.EmployeesController = EmployeesController = __decorate([
     (0, common_1.Controller)('employees'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),

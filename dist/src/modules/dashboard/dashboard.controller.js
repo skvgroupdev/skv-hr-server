@@ -23,6 +23,10 @@ let DashboardController = class DashboardController {
     constructor(dashboardService) {
         this.dashboardService = dashboardService;
     }
+    async getTodayOverview(user) {
+        const data = await this.dashboardService.getTodayOverview(user);
+        return { data };
+    }
     async getPendingCounts(user) {
         const data = await this.dashboardService.getPendingCounts(user);
         return { data };
@@ -33,6 +37,14 @@ let DashboardController = class DashboardController {
     }
 };
 exports.DashboardController = DashboardController;
+__decorate([
+    (0, common_1.Get)('today-overview'),
+    (0, roles_decorator_1.Roles)('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], DashboardController.prototype, "getTodayOverview", null);
 __decorate([
     (0, common_1.Get)('pending-counts'),
     (0, roles_decorator_1.Roles)('COMPANY_OWNER', 'HR_ADMIN', 'BRANCH_MANAGER', 'SUPERVISOR'),

@@ -24,6 +24,7 @@ export declare class OutsideWorkRepository {
         total: number;
     }>;
     findPending(tenantId: Types.ObjectId): Promise<OutsideWorkDocument[]>;
+    findTodayActive(tenantId: Types.ObjectId, date: Date): Promise<OutsideWorkDocument[]>;
     update(id: string, tenantId: Types.ObjectId, update: Partial<OutsideWork>): Promise<OutsideWorkDocument | null>;
     findReport(tenantId: Types.ObjectId, filter: Record<string, unknown>, page: number, limit: number): Promise<{
         items: (import("mongoose").Document<unknown, {}, import("mongoose").Document<unknown, {}, OutsideWork, {}, import("mongoose").DefaultSchemaOptions> & OutsideWork & {

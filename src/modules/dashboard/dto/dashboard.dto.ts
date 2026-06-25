@@ -20,6 +20,9 @@ export interface RecentEmployeeDto {
   firstName: string;
   lastName: string;
   employeeCode?: string;
+  status: string;
+  branch: string;
+  position: string;
   createdAt: Date;
 }
 

@@ -185,7 +185,7 @@ let EmployeesService = class EmployeesService {
         });
         const assignedRole = dto.role ?? 'STAFF';
         assertCanAssignRole(currentUser.role, assignedRole);
-        const rawPassword = dto.initialPassword ?? Math.random().toString(36).slice(-8);
+        const rawPassword = dto.initialPassword;
         const hashedPassword = await bcrypt.hash(rawPassword, BCRYPT_ROUNDS);
         const alreadyHasUser = await this.usersRepository.existsByPhoneAndCompany(dto.phone, tenantObjectId);
         if (!alreadyHasUser) {
@@ -281,7 +281,10 @@ let EmployeesService = class EmployeesService {
         }
         const updated = await this.employeesRepository.update(id, tenantObjectId, dto);
         if (existing.userId) {
-            const userId = existing.userId.toString();
+            const rawUid = existing.userId;
+            const userId = typeof rawUid === 'object' && '_id' in rawUid
+                ? rawUid._id.toString()
+                : rawUid.toString();
             if (dto.phone && dto.phone !== existing.phone) {
                 await this.usersRepository.updatePhone(userId, dto.phone);
             }
@@ -325,6 +328,24 @@ let EmployeesService = class EmployeesService {
         });
         return updated;
     }
+    async softDelete(currentUser, id) {
+        const tenantObjectId = new mongoose_1.Types.ObjectId(currentUser.companyId);
+        const existing = await this.employeesRepository.findById(id, tenantObjectId);
+        if (!existing)
+            throw new common_1.NotFoundException('Employee not found');
+        await this.employeesRepository.softDelete(id, tenantObjectId);
+        await this.auditLogService.log({
+            tenantId: tenantObjectId,
+            actorId: currentUser.sub,
+            actorRole: currentUser.role,
+            action: 'DELETE_EMPLOYEE',
+            module: 'employees',
+            targetId: new mongoose_1.Types.ObjectId(id),
+            before: { firstName: existing.firstName, lastName: existing.lastName },
+            after: { isDeleted: true },
+        });
+        return { message: 'Employee deleted successfully' };
+    }
     async reactivate(currentUser, id) {
         const tenantObjectId = new mongoose_1.Types.ObjectId(currentUser.companyId);
         const existing = await this.employeesRepository.findById(id, tenantObjectId);
@@ -367,7 +388,10 @@ let EmployeesService = class EmployeesService {
             throw new common_1.NotFoundException('Employee not found');
         if (!employee.userId)
             throw new common_1.ForbiddenException('Employee has no linked user account');
-        const userId = employee.userId.toString();
+        const rawUidRole = employee.userId;
+        const userId = typeof rawUidRole === 'object' && '_id' in rawUidRole
+            ? rawUidRole._id.toString()
+            : rawUidRole.toString();
         await this.usersRepository.updateRole(userId, newRole);
         await this.auditLogService.log({
             tenantId: tenantObjectId,
@@ -387,6 +411,44 @@ let EmployeesService = class EmployeesService {
         if (!updated)
             throw new common_1.NotFoundException('Employee profile not found');
         return toEmployeeResponse(updated);
+    }
+    async changePassword(currentUser, employeeId, dto) {
+        const tenantObjectId = new mongoose_1.Types.ObjectId(currentUser.companyId);
+        const employee = await this.employeesRepository.findById(employeeId, tenantObjectId);
+        if (!employee)
+            throw new common_1.NotFoundException('Employee not found');
+        if (!employee.userId) {
+            throw new common_1.ForbiddenException('Employee has no linked user account');
+        }
+        const rawUserId = employee.userId;
+        const userId = typeof rawUserId === 'object' && '_id' in rawUserId
+            ? rawUserId._id.toString()
+            : rawUserId.toString();
+        if (currentUser.role === 'STAFF' && userId !== currentUser.sub) {
+            throw new common_1.ForbiddenException('Access denied');
+        }
+        const userWithPassword = await this.usersRepository.findByIdWithSensitive(userId);
+        if (!userWithPassword)
+            throw new common_1.NotFoundException('User account not found');
+        const isStaff = currentUser.role === 'STAFF';
+        if (isStaff) {
+            if (!dto.currentPassword)
+                throw new common_1.BadRequestException('กรุณาระบุรหัสผ่านปัจจุบัน');
+            const isPasswordCorrect = await bcrypt.compare(dto.currentPassword, userWithPassword.password);
+            if (!isPasswordCorrect)
+                throw new common_1.BadRequestException('รหัสผ่านปัจจุบันไม่ถูกต้อง');
+        }
+        const hashedNewPassword = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
+        await this.usersRepository.updatePassword(userId, hashedNewPassword);
+        await this.auditLogService.log({
+            tenantId: tenantObjectId,
+            actorId: currentUser.sub,
+            actorRole: currentUser.role,
+            action: 'CHANGE_PASSWORD',
+            module: 'employees',
+            targetId: new mongoose_1.Types.ObjectId(employeeId),
+        });
+        return { message: 'Password changed successfully' };
     }
     async getDocuments(currentUser, id) {
         const tenantObjectId = new mongoose_1.Types.ObjectId(currentUser.companyId);

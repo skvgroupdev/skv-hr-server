@@ -39,9 +39,14 @@ let EmployeesRepository = class EmployeesRepository {
         delete data.initialPassword;
         return this.employeeModel.create(data);
     }
+    async softDelete(id, tenantId) {
+        return this.employeeModel
+            .findOneAndUpdate({ _id: id, tenantId, isDeleted: { $ne: true } }, { isDeleted: true }, { returnDocument: 'after' })
+            .exec();
+    }
     async findById(id, tenantId) {
         return this.employeeModel
-            .findOne({ _id: id, tenantId })
+            .findOne({ _id: id, tenantId, isDeleted: { $ne: true } })
             .populate('branchId', 'name')
             .populate('departmentId', 'name')
             .populate('positionId', 'name')
@@ -52,7 +57,7 @@ let EmployeesRepository = class EmployeesRepository {
         const skip = (page - 1) * limit;
         const sortOrder = sort.startsWith('-') ? -1 : 1;
         const sortField = sort.replace(/^-/, '');
-        const mongoFilter = filter;
+        const mongoFilter = { ...filter, isDeleted: { $ne: true } };
         const [employees, total] = await Promise.all([
             this.employeeModel
                 .find(mongoFilter)
@@ -98,7 +103,7 @@ let EmployeesRepository = class EmployeesRepository {
     }
     async findByUserId(userId) {
         return this.employeeModel
-            .findOne({ userId })
+            .findOne({ userId, isDeleted: { $ne: true } })
             .select('employeeCode firstName lastName email photoUrl bankName bankAccount employmentType startDate status branchId departmentId positionId')
             .populate('positionId', 'name banding')
             .populate('departmentId', 'name')
@@ -107,7 +112,7 @@ let EmployeesRepository = class EmployeesRepository {
     }
     async findFullByUserIdAndTenant(userId, tenantId) {
         return this.employeeModel
-            .findOne({ userId, tenantId })
+            .findOne({ userId, tenantId, isDeleted: { $ne: true } })
             .populate('branchId', 'name')
             .populate('departmentId', 'name')
             .populate('positionId', 'name')
@@ -115,7 +120,7 @@ let EmployeesRepository = class EmployeesRepository {
     }
     async updateByUserIdAndTenant(userId, tenantId, data) {
         return this.employeeModel
-            .findOneAndUpdate({ userId, tenantId }, data, { returnDocument: 'after' })
+            .findOneAndUpdate({ userId, tenantId, isDeleted: { $ne: true } }, data, { returnDocument: 'after' })
             .populate('branchId', 'name')
             .populate('departmentId', 'name')
             .populate('positionId', 'name')
@@ -123,7 +128,7 @@ let EmployeesRepository = class EmployeesRepository {
     }
     async findByUserIdAndTenant(userId, tenantId) {
         return this.employeeModel
-            .findOne({ userId, tenantId })
+            .findOne({ userId, tenantId, isDeleted: { $ne: true } })
             .select('employeeCode firstName lastName status branchId managerId supervisorId userId')
             .exec();
     }
@@ -131,6 +136,7 @@ let EmployeesRepository = class EmployeesRepository {
         return this.employeeModel
             .countDocuments({
             tenantId,
+            isDeleted: { $ne: true },
             status: { $nin: ['RESIGNED', 'TERMINATED'] },
         })
             .exec();
@@ -139,6 +145,7 @@ let EmployeesRepository = class EmployeesRepository {
         return this.employeeModel
             .countDocuments({
             tenantId,
+            isDeleted: { $ne: true },
             status: 'ACTIVE',
             ...(branchId ? { branchId } : {}),
         })
@@ -149,6 +156,7 @@ let EmployeesRepository = class EmployeesRepository {
             .find({
             _id: { $in: ids.map((id) => new mongoose_2.Types.ObjectId(id)) },
             tenantId,
+            isDeleted: { $ne: true },
         })
             .select('firstName lastName employeeCode positionId departmentId')
             .populate('positionId', 'name')
@@ -156,7 +164,7 @@ let EmployeesRepository = class EmployeesRepository {
             .exec();
     }
     async findAllActive(tenantId, branchId) {
-        const filter = { tenantId, status: 'ACTIVE' };
+        const filter = { tenantId, status: 'ACTIVE', isDeleted: { $ne: true } };
         if (branchId)
             filter.branchId = branchId;
         return this.employeeModel
@@ -176,7 +184,7 @@ let EmployeesRepository = class EmployeesRepository {
         return `${prefix}${seq}`;
     }
     async findByEmployeeCode(tenantId, employeeCode) {
-        return this.employeeModel.findOne({ tenantId, employeeCode }).exec();
+        return this.employeeModel.findOne({ tenantId, employeeCode, isDeleted: { $ne: true } }).exec();
     }
 };
 exports.EmployeesRepository = EmployeesRepository;

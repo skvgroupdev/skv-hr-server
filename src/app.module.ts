@@ -39,6 +39,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { SubscriptionGuard } from './common/guards/subscription.guard';
 import { CompanyPoliciesModule } from './modules/company-policies/company-policies.module';
 import { AttendanceAdjustmentsModule } from './modules/attendance-adjustments/attendance-adjustments.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { AttendanceAdjustmentsModule } from './modules/attendance-adjustments/at
     AttendanceAdjustmentsModule,
     DashboardModule,
     UploadsModule,
+    HealthModule,
   ],
   providers: [
     {

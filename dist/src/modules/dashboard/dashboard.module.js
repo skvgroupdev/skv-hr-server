@@ -15,6 +15,7 @@ const attendance_module_1 = require("../attendance/attendance.module");
 const leave_module_1 = require("../leave/leave.module");
 const ot_module_1 = require("../ot/ot.module");
 const outside_work_module_1 = require("../outside-work/outside-work.module");
+const attendance_adjustments_module_1 = require("../attendance-adjustments/attendance-adjustments.module");
 const dashboard_repository_1 = require("./dashboard.repository");
 const dashboard_service_1 = require("./dashboard.service");
 const dashboard_controller_1 = require("./dashboard.controller");
@@ -32,6 +33,7 @@ exports.DashboardModule = DashboardModule = __decorate([
             leave_module_1.LeaveModule,
             ot_module_1.OTModule,
             outside_work_module_1.OutsideWorkModule,
+            attendance_adjustments_module_1.AttendanceAdjustmentsModule,
         ],
         providers: [dashboard_repository_1.DashboardRepository, dashboard_service_1.DashboardService],
         controllers: [dashboard_controller_1.DashboardController],

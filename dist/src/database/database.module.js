@@ -21,6 +21,18 @@ exports.DatabaseModule = DatabaseModule = __decorate([
                 inject: [config_1.ConfigService],
                 useFactory: (configService) => ({
                     uri: configService.get('mongo.uri'),
+                    connectionFactory: (connection) => {
+                        connection.on('connected', () => {
+                            console.log('[MongoDB] Connected');
+                        });
+                        connection.on('disconnected', () => {
+                            console.warn('[MongoDB] Disconnected');
+                        });
+                        connection.on('error', (err) => {
+                            console.error('[MongoDB] Connection error:', err.message);
+                        });
+                        return connection;
+                    },
                 }),
             }),
         ],

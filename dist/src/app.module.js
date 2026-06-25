@@ -46,6 +46,7 @@ const jwt_auth_guard_1 = require("./modules/auth/guards/jwt-auth.guard");
 const subscription_guard_1 = require("./common/guards/subscription.guard");
 const company_policies_module_1 = require("./modules/company-policies/company-policies.module");
 const attendance_adjustments_module_1 = require("./modules/attendance-adjustments/attendance-adjustments.module");
+const health_module_1 = require("./modules/health/health.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -90,6 +91,7 @@ exports.AppModule = AppModule = __decorate([
             attendance_adjustments_module_1.AttendanceAdjustmentsModule,
             dashboard_module_1.DashboardModule,
             uploads_module_1.UploadsModule,
+            health_module_1.HealthModule,
         ],
         providers: [
             {

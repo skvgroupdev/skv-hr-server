@@ -6,6 +6,7 @@ import { AttendanceModule } from '../attendance/attendance.module';
 import { LeaveModule } from '../leave/leave.module';
 import { OTModule } from '../ot/ot.module';
 import { OutsideWorkModule } from '../outside-work/outside-work.module';
+import { AttendanceAdjustmentsModule } from '../attendance-adjustments/attendance-adjustments.module';
 import { DashboardRepository } from './dashboard.repository';
 import { DashboardService } from './dashboard.service';
 import { DashboardController } from './dashboard.controller';
@@ -20,6 +21,7 @@ import { DashboardController } from './dashboard.controller';
     LeaveModule,
     OTModule,
     OutsideWorkModule,
+    AttendanceAdjustmentsModule,
   ],
   providers: [DashboardRepository, DashboardService],
   controllers: [DashboardController],

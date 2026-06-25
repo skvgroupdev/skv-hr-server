@@ -198,6 +198,26 @@ export class LeaveRepository {
       .exec();
   }
 
+  // Returns leave requests that cover today (PENDING or APPROVED)
+  findTodayActive(tenantId: Types.ObjectId, date: Date): Promise<LeaveRequestDocument[]> {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+    return this.requestModel
+      .find({
+        tenantId,
+        status: { $in: ['PENDING', 'APPROVED'] },
+        startDate: { $lte: end },
+        endDate: { $gte: start },
+      })
+      .select('employeeId status leaveTypeId')
+      .populate('leaveTypeId', 'name')
+      .populate('employeeId', 'firstName lastName employeeCode')
+      .lean()
+      .exec();
+  }
+
   async findReport(
     tenantId: Types.ObjectId,
     filter: Record<string, unknown>,

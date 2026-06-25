@@ -45,6 +45,22 @@ let OutsideWorkRepository = class OutsideWorkRepository {
             .populate('employeeId', 'firstName lastName phone')
             .exec();
     }
+    findTodayActive(tenantId, date) {
+        const start = new Date(date);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(date);
+        end.setHours(23, 59, 59, 999);
+        return this.model
+            .find({
+            tenantId,
+            status: { $in: ['PENDING', 'APPROVED'] },
+            createdAt: { $gte: start, $lte: end },
+        })
+            .select('employeeId status outsideType')
+            .populate('employeeId', 'firstName lastName employeeCode')
+            .lean()
+            .exec();
+    }
     update(id, tenantId, update) {
         return this.model.findOneAndUpdate({ _id: id, tenantId }, update, { returnDocument: 'after' }).exec();
     }

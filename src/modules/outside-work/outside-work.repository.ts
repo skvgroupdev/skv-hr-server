@@ -37,6 +37,24 @@ export class OutsideWorkRepository {
       .exec();
   }
 
+  // Returns outside-work requests created today (any status except REJECTED)
+  findTodayActive(tenantId: Types.ObjectId, date: Date): Promise<OutsideWorkDocument[]> {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+    return this.model
+      .find({
+        tenantId,
+        status: { $in: ['PENDING', 'APPROVED'] },
+        createdAt: { $gte: start, $lte: end },
+      })
+      .select('employeeId status outsideType')
+      .populate('employeeId', 'firstName lastName employeeCode')
+      .lean()
+      .exec();
+  }
+
   update(id: string, tenantId: Types.ObjectId, update: Partial<OutsideWork>): Promise<OutsideWorkDocument | null> {
     return this.model.findOneAndUpdate({ _id: id, tenantId }, update, { returnDocument: 'after' }).exec();
   }

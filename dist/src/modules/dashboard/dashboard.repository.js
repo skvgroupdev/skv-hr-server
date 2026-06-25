@@ -22,6 +22,7 @@ const attendance_repository_1 = require("../attendance/attendance.repository");
 const leave_repository_1 = require("../leave/leave.repository");
 const ot_repository_1 = require("../ot/ot.repository");
 const outside_work_repository_1 = require("../outside-work/outside-work.repository");
+const attendance_adjustments_repository_1 = require("../attendance-adjustments/attendance-adjustments.repository");
 let DashboardRepository = class DashboardRepository {
     employeeModel;
     branchModel;
@@ -29,13 +30,15 @@ let DashboardRepository = class DashboardRepository {
     leaveRepository;
     otRepository;
     outsideWorkRepository;
-    constructor(employeeModel, branchModel, attendanceRepository, leaveRepository, otRepository, outsideWorkRepository) {
+    adjustmentsRepository;
+    constructor(employeeModel, branchModel, attendanceRepository, leaveRepository, otRepository, outsideWorkRepository, adjustmentsRepository) {
         this.employeeModel = employeeModel;
         this.branchModel = branchModel;
         this.attendanceRepository = attendanceRepository;
         this.leaveRepository = leaveRepository;
         this.otRepository = otRepository;
         this.outsideWorkRepository = outsideWorkRepository;
+        this.adjustmentsRepository = adjustmentsRepository;
     }
     async countEmployees(tenantId) {
         const [total, active, inactive] = await Promise.all([
@@ -70,19 +73,67 @@ let DashboardRepository = class DashboardRepository {
     }
     async findRecentEmployees(tenantId, limit = 5) {
         const docs = await this.employeeModel
-            .find({ tenantId })
+            .find({ tenantId, isDeleted: { $ne: true } })
             .sort({ createdAt: -1 })
             .limit(limit)
-            .select('firstName lastName employeeCode createdAt')
+            .select('firstName lastName employeeCode status branchId positionId createdAt')
+            .populate('branchId', 'name')
+            .populate('positionId', 'name')
             .lean()
             .exec();
-        return docs.map((doc) => ({
-            id: doc._id.toString(),
-            firstName: doc.firstName,
-            lastName: doc.lastName,
-            employeeCode: doc.employeeCode,
-            createdAt: doc.createdAt,
-        }));
+        return docs.map((doc) => {
+            const branch = doc.branchId;
+            const position = doc.positionId;
+            return {
+                id: doc._id.toString(),
+                firstName: doc.firstName,
+                lastName: doc.lastName,
+                employeeCode: doc.employeeCode,
+                status: doc.status ?? 'ACTIVE',
+                branch: branch?.name ?? '-',
+                position: position?.name ?? '-',
+                createdAt: doc.createdAt,
+            };
+        });
+    }
+    async getTodayOverview(tenantId, date) {
+        const [leaveRequests, outsideWorkRequests, adjustmentRequests] = await Promise.all([
+            this.leaveRepository.findTodayActive(tenantId, date),
+            this.outsideWorkRepository.findTodayActive(tenantId, date),
+            this.adjustmentsRepository.findTodayActive(tenantId, date),
+        ]);
+        const mapEmployee = (emp) => {
+            const e = emp;
+            if (!e)
+                return null;
+            return {
+                id: e.id ?? e._id?.toString() ?? '',
+                firstName: e.firstName ?? '',
+                lastName: e.lastName ?? '',
+                employeeCode: e.employeeCode,
+            };
+        };
+        return {
+            leave: leaveRequests.map((r) => ({
+                employeeId: r.employeeId.toString(),
+                employee: mapEmployee(r.employeeId),
+                status: r.status,
+                leaveTypeName: r.leaveTypeId?.name ?? null,
+            })),
+            outsideWork: outsideWorkRequests.map((r) => ({
+                employeeId: r.employeeId.toString(),
+                employee: mapEmployee(r.employeeId),
+                status: r.status,
+                outsideType: r.outsideType,
+            })),
+            adjustments: adjustmentRequests.map((r) => ({
+                employeeId: r.employeeId.toString(),
+                employee: mapEmployee(r.employeeId),
+                status: r.status,
+                workDate: r.workDate,
+                type: r.type ?? '-',
+            })),
+        };
     }
     async getMonthlySummary(tenantId) {
         const year = new Date().getFullYear();
@@ -105,7 +156,8 @@ exports.DashboardRepository = DashboardRepository = __decorate([
         attendance_repository_1.AttendanceRepository,
         leave_repository_1.LeaveRepository,
         ot_repository_1.OTRepository,
-        outside_work_repository_1.OutsideWorkRepository])
+        outside_work_repository_1.OutsideWorkRepository,
+        attendance_adjustments_repository_1.AttendanceAdjustmentsRepository])
 ], DashboardRepository);
 function buildMonthlySummary(leaveItems, otItems) {
     const months = Array.from({ length: 12 }, (_, i) => ({

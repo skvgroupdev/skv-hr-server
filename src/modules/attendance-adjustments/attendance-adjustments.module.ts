@@ -22,5 +22,6 @@ import { AuditLogModule } from '../audit-logs/audit-log.module';
   ],
   providers: [AttendanceAdjustmentsRepository, AttendanceAdjustmentsService],
   controllers: [AttendanceAdjustmentsController],
+  exports: [AttendanceAdjustmentsRepository],
 })
 export class AttendanceAdjustmentsModule {}

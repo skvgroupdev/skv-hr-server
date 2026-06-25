@@ -31,6 +31,7 @@ exports.AttendanceAdjustmentsModule = AttendanceAdjustmentsModule = __decorate([
         ],
         providers: [attendance_adjustments_repository_1.AttendanceAdjustmentsRepository, attendance_adjustments_service_1.AttendanceAdjustmentsService],
         controllers: [attendance_adjustments_controller_1.AttendanceAdjustmentsController],
+        exports: [attendance_adjustments_repository_1.AttendanceAdjustmentsRepository],
     })
 ], AttendanceAdjustmentsModule);
 //# sourceMappingURL=attendance-adjustments.module.js.map
