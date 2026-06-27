@@ -46,6 +46,9 @@ let UsersRepository = class UsersRepository {
     async create(data) {
         return this.userModel.create(data);
     }
+    async deleteById(userId) {
+        await this.userModel.deleteOne({ _id: userId }).exec();
+    }
     async updateRefreshToken(userId, hashedToken) {
         await this.userModel
             .findByIdAndUpdate(userId, { refreshToken: hashedToken })

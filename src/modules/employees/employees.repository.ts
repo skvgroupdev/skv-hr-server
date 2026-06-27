@@ -51,17 +51,18 @@ export class EmployeesRepository {
     return this.employeeModel.create(data);
   }
 
-  async softDelete(
+  async hardDelete(
     id: string,
     tenantId: Types.ObjectId,
-  ): Promise<EmployeeDocument | null> {
-    return this.employeeModel
-      .findOneAndUpdate(
-        { _id: id, tenantId, isDeleted: { $ne: true } },
-        { isDeleted: true },
-        { returnDocument: 'after' },
-      )
+  ): Promise<{ deletedCount: number; userId: Types.ObjectId | null }> {
+    const doc = await this.employeeModel
+      .findOne({ _id: id, tenantId })
+      .select('userId')
+      .lean()
       .exec();
+    if (!doc) return { deletedCount: 0, userId: null };
+    await this.employeeModel.deleteOne({ _id: id, tenantId }).exec();
+    return { deletedCount: 1, userId: (doc.userId as Types.ObjectId | null) ?? null };
   }
 
   async findById(
@@ -264,10 +265,17 @@ export class EmployeesRepository {
     year: number,
   ): Promise<string> {
     const prefix = `${companyCode}-${year}-`;
-    const count = await this.employeeModel
-      .countDocuments({ tenantId, employeeCode: { $regex: `^${prefix}` } })
+    // Use max sequence (not count) so hard-deleted employees don't cause duplicates
+    const last = await this.employeeModel
+      .findOne({ tenantId, employeeCode: { $regex: `^${prefix}` } })
+      .sort({ employeeCode: -1 })
+      .select('employeeCode')
+      .lean()
       .exec();
-    const seq = String(count + 1).padStart(4, '0');
+    const lastSeq = last?.employeeCode
+      ? parseInt(last.employeeCode.slice(prefix.length), 10)
+      : 0;
+    const seq = String(lastSeq + 1).padStart(4, '0');
     return `${prefix}${seq}`;
   }
 

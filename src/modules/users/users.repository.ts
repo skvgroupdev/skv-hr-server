@@ -42,6 +42,10 @@ export class UsersRepository {
     return this.userModel.create(data);
   }
 
+  async deleteById(userId: string): Promise<void> {
+    await this.userModel.deleteOne({ _id: userId }).exec();
+  }
+
   async updateRefreshToken(
     userId: string,
     hashedToken: string | null,

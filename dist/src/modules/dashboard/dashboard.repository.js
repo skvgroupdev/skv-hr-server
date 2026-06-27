@@ -41,10 +41,11 @@ let DashboardRepository = class DashboardRepository {
         this.adjustmentsRepository = adjustmentsRepository;
     }
     async countEmployees(tenantId) {
+        const base = { tenantId, isDeleted: { $ne: true } };
         const [total, active, inactive] = await Promise.all([
-            this.employeeModel.countDocuments({ tenantId }).exec(),
-            this.employeeModel.countDocuments({ tenantId, status: 'ACTIVE' }).exec(),
-            this.employeeModel.countDocuments({ tenantId, status: 'INACTIVE' }).exec(),
+            this.employeeModel.countDocuments(base).exec(),
+            this.employeeModel.countDocuments({ ...base, status: 'ACTIVE' }).exec(),
+            this.employeeModel.countDocuments({ ...base, status: 'INACTIVE' }).exec(),
         ]);
         return { total, active, inactive };
     }

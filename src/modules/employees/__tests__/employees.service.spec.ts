@@ -90,7 +90,8 @@ describe('EmployeesService', () => {
           provide: UsersRepository,
           useValue: {
             create: jest.fn(),
-            existsByPhoneAndCompany: jest.fn(),
+            findByPhoneAndCompany: jest.fn(),
+            updatePassword: jest.fn(),
           },
         },
         {
@@ -129,6 +130,8 @@ describe('EmployeesService', () => {
 
     companiesRepository.findById.mockResolvedValue({
       planId: new Types.ObjectId(PLAN_ID),
+      name: 'Test Company',
+      companyCode: 'TST',
     } as never);
     plansRepository.findById.mockResolvedValue({
       isActive: true,
@@ -151,7 +154,7 @@ describe('EmployeesService', () => {
 
       employeesRepository.generateNextCode.mockResolvedValue('EMP-202605-001');
       employeesRepository.create.mockResolvedValue(employeeDoc as never);
-      usersRepository.existsByPhoneAndCompany.mockResolvedValue(false);
+      usersRepository.findByPhoneAndCompany.mockResolvedValue(null);
       usersRepository.create.mockResolvedValue(userDoc as never);
       employeesRepository.linkUser.mockResolvedValue(undefined);
       auditLogService.log.mockResolvedValue(undefined);
@@ -176,17 +179,25 @@ describe('EmployeesService', () => {
       expect(result).toEqual(employeeDoc);
     });
 
-    it('skips user creation if phone already has a user in the company', async () => {
+    it('reuses existing user, updates password, and links employee when phone already registered', async () => {
       const employeeDoc = makeEmployeeDoc();
+      const existingUser = makeUserDoc();
 
       employeesRepository.generateNextCode.mockResolvedValue('EMP-202605-002');
       employeesRepository.create.mockResolvedValue(employeeDoc as never);
-      usersRepository.existsByPhoneAndCompany.mockResolvedValue(true);
+      usersRepository.findByPhoneAndCompany.mockResolvedValue(existingUser as never);
+      usersRepository.updatePassword.mockResolvedValue(undefined);
+      employeesRepository.linkUser.mockResolvedValue(undefined);
       auditLogService.log.mockResolvedValue(undefined);
 
       await service.create(makeJwtPayload(), dto);
 
       expect(usersRepository.create).not.toHaveBeenCalled();
+      expect(usersRepository.updatePassword).toHaveBeenCalledWith(
+        existingUser._id.toString(),
+        expect.any(String),
+      );
+      expect(employeesRepository.linkUser).toHaveBeenCalled();
     });
 
     it('throws ConflictException on duplicate phone (mongo error code 11000)', async () => {

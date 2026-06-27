@@ -187,8 +187,8 @@ let EmployeesService = class EmployeesService {
         assertCanAssignRole(currentUser.role, assignedRole);
         const rawPassword = dto.initialPassword;
         const hashedPassword = await bcrypt.hash(rawPassword, BCRYPT_ROUNDS);
-        const alreadyHasUser = await this.usersRepository.existsByPhoneAndCompany(dto.phone, tenantObjectId);
-        if (!alreadyHasUser) {
+        const existingUser = await this.usersRepository.findByPhoneAndCompany(dto.phone, tenantObjectId);
+        if (!existingUser) {
             const user = await this.usersRepository.create({
                 phone: dto.phone,
                 name: `${dto.firstName} ${dto.lastName}`,
@@ -199,6 +199,10 @@ let EmployeesService = class EmployeesService {
                 isActive: true,
             });
             await this.employeesRepository.linkUser(employee._id.toString(), tenantObjectId, user._id);
+        }
+        else {
+            await this.usersRepository.updatePassword(existingUser._id.toString(), hashedPassword);
+            await this.employeesRepository.linkUser(employee._id.toString(), tenantObjectId, existingUser._id);
         }
         await this.auditLogService.log({
             tenantId: tenantObjectId,
@@ -330,10 +334,12 @@ let EmployeesService = class EmployeesService {
     }
     async softDelete(currentUser, id) {
         const tenantObjectId = new mongoose_1.Types.ObjectId(currentUser.companyId);
-        const existing = await this.employeesRepository.findById(id, tenantObjectId);
-        if (!existing)
+        const { deletedCount, userId } = await this.employeesRepository.hardDelete(id, tenantObjectId);
+        if (deletedCount === 0)
             throw new common_1.NotFoundException('Employee not found');
-        await this.employeesRepository.softDelete(id, tenantObjectId);
+        if (userId) {
+            await this.usersRepository.deleteById(userId.toString());
+        }
         await this.auditLogService.log({
             tenantId: tenantObjectId,
             actorId: currentUser.sub,
@@ -341,8 +347,7 @@ let EmployeesService = class EmployeesService {
             action: 'DELETE_EMPLOYEE',
             module: 'employees',
             targetId: new mongoose_1.Types.ObjectId(id),
-            before: { firstName: existing.firstName, lastName: existing.lastName },
-            after: { isDeleted: true },
+            after: { deleted: true },
         });
         return { message: 'Employee deleted successfully' };
     }

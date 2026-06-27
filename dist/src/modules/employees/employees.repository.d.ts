@@ -18,7 +18,10 @@ export declare class EmployeesRepository {
     private readonly employeeModel;
     constructor(employeeModel: Model<EmployeeDocument>);
     create(tenantId: Types.ObjectId, dto: CreateEmployeeDto): Promise<EmployeeDocument>;
-    softDelete(id: string, tenantId: Types.ObjectId): Promise<EmployeeDocument | null>;
+    hardDelete(id: string, tenantId: Types.ObjectId): Promise<{
+        deletedCount: number;
+        userId: Types.ObjectId | null;
+    }>;
     findById(id: string, tenantId: Types.ObjectId): Promise<EmployeeDocument | null>;
     findPaginated(filter: EmployeeListFilter, page: number, limit: number, sort: string): Promise<PaginatedEmployees>;
     update(id: string, tenantId: Types.ObjectId, dto: UpdateEmployeeDto): Promise<EmployeeDocument | null>;

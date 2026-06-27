@@ -9,6 +9,7 @@ export declare class UsersRepository {
     findByPhoneAndCompany(phone: string, companyId: Types.ObjectId | null): Promise<UserDocument | null>;
     findAllByPhone(phone: string): Promise<UserDocument[]>;
     create(data: Partial<User>): Promise<UserDocument>;
+    deleteById(userId: string): Promise<void>;
     updateRefreshToken(userId: string, hashedToken: string | null): Promise<void>;
     updatePassword(userId: string, hashedPassword: string): Promise<void>;
     updatePhone(userId: string, phone: string): Promise<void>;

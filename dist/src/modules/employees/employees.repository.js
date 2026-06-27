@@ -39,10 +39,16 @@ let EmployeesRepository = class EmployeesRepository {
         delete data.initialPassword;
         return this.employeeModel.create(data);
     }
-    async softDelete(id, tenantId) {
-        return this.employeeModel
-            .findOneAndUpdate({ _id: id, tenantId, isDeleted: { $ne: true } }, { isDeleted: true }, { returnDocument: 'after' })
+    async hardDelete(id, tenantId) {
+        const doc = await this.employeeModel
+            .findOne({ _id: id, tenantId })
+            .select('userId')
+            .lean()
             .exec();
+        if (!doc)
+            return { deletedCount: 0, userId: null };
+        await this.employeeModel.deleteOne({ _id: id, tenantId }).exec();
+        return { deletedCount: 1, userId: doc.userId ?? null };
     }
     async findById(id, tenantId) {
         return this.employeeModel
@@ -177,10 +183,16 @@ let EmployeesRepository = class EmployeesRepository {
     }
     async generateNextCode(tenantId, companyCode, year) {
         const prefix = `${companyCode}-${year}-`;
-        const count = await this.employeeModel
-            .countDocuments({ tenantId, employeeCode: { $regex: `^${prefix}` } })
+        const last = await this.employeeModel
+            .findOne({ tenantId, employeeCode: { $regex: `^${prefix}` } })
+            .sort({ employeeCode: -1 })
+            .select('employeeCode')
+            .lean()
             .exec();
-        const seq = String(count + 1).padStart(4, '0');
+        const lastSeq = last?.employeeCode
+            ? parseInt(last.employeeCode.slice(prefix.length), 10)
+            : 0;
+        const seq = String(lastSeq + 1).padStart(4, '0');
         return `${prefix}${seq}`;
     }
     async findByEmployeeCode(tenantId, employeeCode) {

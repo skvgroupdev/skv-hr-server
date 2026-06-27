@@ -224,12 +224,13 @@ export class EmployeesService {
     const rawPassword = dto.initialPassword;
     const hashedPassword = await bcrypt.hash(rawPassword, BCRYPT_ROUNDS);
 
-    const alreadyHasUser = await this.usersRepository.existsByPhoneAndCompany(
+    // Use findByPhoneAndCompany (phone variants) so all phone formats are matched
+    const existingUser = await this.usersRepository.findByPhoneAndCompany(
       dto.phone,
       tenantObjectId,
     );
 
-    if (!alreadyHasUser) {
+    if (!existingUser) {
       const user = await this.usersRepository.create({
         phone: dto.phone,
         name: `${dto.firstName} ${dto.lastName}`,
@@ -243,6 +244,18 @@ export class EmployeesService {
         (employee._id as Types.ObjectId).toString(),
         tenantObjectId,
         user._id as Types.ObjectId,
+      );
+    } else {
+      // User exists (e.g. company owner or previous partial creation):
+      // update their password to the new initialPassword and link to this employee
+      await this.usersRepository.updatePassword(
+        (existingUser._id as Types.ObjectId).toString(),
+        hashedPassword,
+      );
+      await this.employeesRepository.linkUser(
+        (employee._id as Types.ObjectId).toString(),
+        tenantObjectId,
+        existingUser._id as Types.ObjectId,
       );
     }
 
@@ -447,10 +460,17 @@ export class EmployeesService {
 
   async softDelete(currentUser: JwtPayload, id: string) {
     const tenantObjectId = new Types.ObjectId(currentUser.companyId!);
-    const existing = await this.employeesRepository.findById(id, tenantObjectId);
-    if (!existing) throw new NotFoundException('Employee not found');
 
-    await this.employeesRepository.softDelete(id, tenantObjectId);
+    const { deletedCount, userId } = await this.employeesRepository.hardDelete(
+      id,
+      tenantObjectId,
+    );
+
+    if (deletedCount === 0) throw new NotFoundException('Employee not found');
+
+    if (userId) {
+      await this.usersRepository.deleteById(userId.toString());
+    }
 
     await this.auditLogService.log({
       tenantId: tenantObjectId,
@@ -459,8 +479,7 @@ export class EmployeesService {
       action: 'DELETE_EMPLOYEE',
       module: 'employees',
       targetId: new Types.ObjectId(id),
-      before: { firstName: existing.firstName, lastName: existing.lastName },
-      after: { isDeleted: true },
+      after: { deleted: true },
     });
 
     return { message: 'Employee deleted successfully' };
