@@ -16,6 +16,7 @@ export declare class ShiftsRepository {
     findOverlappingAssignment(tenantId: Types.ObjectId, employeeId: Types.ObjectId, effectiveDate: Date, endDate?: Date): Promise<ShiftAssignmentDocument | null>;
     findAssignmentsForRange(tenantId: Types.ObjectId, employeeIds: Types.ObjectId[], startDate: Date, endDate: Date): Promise<ShiftAssignmentDocument[]>;
     closeAssignment(id: Types.ObjectId, tenantId: Types.ObjectId, endDate: Date): Promise<ShiftAssignmentDocument | null>;
+    updateAssignment(id: Types.ObjectId, tenantId: Types.ObjectId, shiftId: Types.ObjectId, effectiveDate: Date, endDate?: Date): Promise<ShiftAssignmentDocument | null>;
     findCurrentAssignmentsByEmployeeIds(employeeIds: Types.ObjectId[], tenantId: Types.ObjectId): Promise<ShiftAssignmentDocument[]>;
     findAllAssignments(employeeId: Types.ObjectId, tenantId: Types.ObjectId): Promise<ShiftAssignmentDocument[]>;
     findCurrentAssignment(employeeId: Types.ObjectId, tenantId: Types.ObjectId): Promise<ShiftAssignmentDocument | null>;

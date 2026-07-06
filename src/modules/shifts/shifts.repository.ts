@@ -135,6 +135,30 @@ export class ShiftsRepository {
       .exec();
   }
 
+  updateAssignment(
+    id: Types.ObjectId,
+    tenantId: Types.ObjectId,
+    shiftId: Types.ObjectId,
+    effectiveDate: Date,
+    endDate?: Date,
+  ): Promise<ShiftAssignmentDocument | null> {
+    return this.assignmentModel
+      .findOneAndUpdate(
+        { _id: id, tenantId },
+        {
+          $set: {
+            shiftId,
+            effectiveDate,
+            ...(endDate ? { endDate } : {}),
+          },
+          ...(!endDate ? { $unset: { endDate: 1 } } : {}),
+        },
+        { returnDocument: 'after' },
+      )
+      .populate('shiftId')
+      .exec();
+  }
+
   async findCurrentAssignmentsByEmployeeIds(
     employeeIds: Types.ObjectId[],
     tenantId: Types.ObjectId,

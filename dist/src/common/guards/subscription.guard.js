@@ -58,7 +58,9 @@ let SubscriptionGuard = class SubscriptionGuard {
             throw new common_1.ForbiddenException('Feature is not available in the current plan');
         }
         const plan = await this.plansRepository.findById(company.planId.toString());
-        const missingFeature = requiredFeatures.find((feature) => !plan?.features?.[feature]);
+        const missingFeature = requiredFeatures.find((feature) => feature === 'outsideWork'
+            ? plan?.features?.outsideWork === false
+            : !plan?.features?.[feature]);
         if (missingFeature) {
             throw new common_1.ForbiddenException(`Feature ${missingFeature} is not available in the current plan`);
         }

@@ -45,13 +45,13 @@ export declare class ShiftsService {
     } & {
         id: string;
     }) | null>;
-    assignToEmployee(tenantId: string, shiftId: string, dto: AssignShiftDto): Promise<import("mongoose").Document<unknown, {}, import("./schemas/shift-assignment.schema").ShiftAssignment, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/shift-assignment.schema").ShiftAssignment & {
+    assignToEmployee(tenantId: string, shiftId: string, dto: AssignShiftDto): Promise<(import("mongoose").Document<unknown, {}, import("./schemas/shift-assignment.schema").ShiftAssignment, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/shift-assignment.schema").ShiftAssignment & {
         _id: Types.ObjectId;
     } & {
         __v: number;
     } & {
         id: string;
-    }>;
+    }) | null>;
     getEmployeeShift(currentUser: JwtPayload, employeeId: string): Promise<import("mongoose").Document<unknown, {}, import("./schemas/shift-assignment.schema").ShiftAssignment, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/shift-assignment.schema").ShiftAssignment & {
         _id: Types.ObjectId;
     } & {

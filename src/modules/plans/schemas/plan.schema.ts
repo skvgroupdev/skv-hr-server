@@ -7,6 +7,7 @@ export interface PlanFeatures {
   attendance: boolean;
   shiftManagement: boolean;
   attendanceAdjustment: boolean;
+  outsideWork: boolean;
   leave: boolean;
   ot: boolean;
   payroll: boolean;
@@ -48,12 +49,14 @@ export class Plan {
       attendance: { type: Boolean, default: true },
       shiftManagement: { type: Boolean, default: false },
       attendanceAdjustment: { type: Boolean, default: false },
+      outsideWork: { type: Boolean, default: true },
       leave: { type: Boolean, default: true },
       ot: { type: Boolean, default: true },
       payroll: { type: Boolean, default: false },
       restDayCompensation: { type: Boolean, default: false },
       advancedReport: { type: Boolean, default: false },
       announcement: { type: Boolean, default: true },
+      _id: false,
     },
     default: {},
   })

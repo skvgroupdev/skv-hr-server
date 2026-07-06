@@ -25,7 +25,10 @@ import {
 import { ShiftDocument } from '../shifts/schemas/shift.schema';
 import { CompaniesRepository } from '../companies/companies.repository';
 import { PlansRepository } from '../plans/plans.repository';
-import type { PlanFeatures } from '../plans/schemas/plan.schema';
+import type {
+  PlanDocument,
+  PlanFeatures,
+} from '../plans/schemas/plan.schema';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -318,11 +321,26 @@ export class AuthService {
   private async getFeatures(
     companyId?: string,
   ): Promise<PlanFeatures | undefined> {
-    if (!companyId) return undefined;
-    const company = await this.companiesRepository.findById(companyId);
-    if (!company?.planId) return undefined;
-    const plan = await this.plansRepository.findById(company.planId.toString());
-    return plan?.features;
+    const plan = await this.getTenantPlan(companyId);
+    if (!plan?.features) return undefined;
+    const features =
+      typeof (plan.features as unknown as { toObject?: () => PlanFeatures })
+        .toObject === 'function'
+        ? (plan.features as unknown as { toObject: () => PlanFeatures }).toObject()
+        : plan.features;
+    return {
+      attendance: features.attendance,
+      shiftManagement: features.shiftManagement,
+      attendanceAdjustment: features.attendanceAdjustment,
+      // Plans created before outside-work became configurable keep their previous access.
+      outsideWork: features.outsideWork ?? true,
+      leave: features.leave,
+      ot: features.ot,
+      payroll: features.payroll,
+      restDayCompensation: features.restDayCompensation,
+      advancedReport: features.advancedReport,
+      announcement: features.announcement,
+    };
   }
 
   private async getSubscriptionSummary(
@@ -331,14 +349,32 @@ export class AuthService {
     if (!companyId) return undefined;
     const company = await this.companiesRepository.findById(companyId);
     if (!company?.planId) return undefined;
-    const plan = await this.plansRepository.findById(company.planId.toString());
+    const plan = await this.resolvePlan(company.planId);
     if (!plan) return undefined;
     return {
-      planId: company.planId.toString(),
+      planId: (plan._id as Types.ObjectId).toString(),
       planName: plan.name,
       status: company.subscription?.status ?? 'TRIAL',
       endDate: company.subscription?.endDate?.toISOString() ?? null,
       isPaid: company.subscription?.isPaid ?? false,
     };
+  }
+
+  private async getTenantPlan(
+    companyId?: string,
+  ): Promise<PlanDocument | null> {
+    if (!companyId) return null;
+    const company = await this.companiesRepository.findById(companyId);
+    if (!company?.planId) return null;
+    return this.resolvePlan(company.planId);
+  }
+
+  private async resolvePlan(planRef: Types.ObjectId): Promise<PlanDocument | null> {
+    const populatedPlan = planRef as unknown as PlanDocument;
+    if (populatedPlan?.features) return populatedPlan;
+
+    const rawId = planRef as unknown as { _id?: Types.ObjectId };
+    const planId = rawId?._id?.toString() ?? planRef.toString();
+    return this.plansRepository.findById(planId);
   }
 }

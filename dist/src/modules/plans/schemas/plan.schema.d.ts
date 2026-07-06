@@ -4,6 +4,7 @@ export interface PlanFeatures {
     attendance: boolean;
     shiftManagement: boolean;
     attendanceAdjustment: boolean;
+    outsideWork: boolean;
     leave: boolean;
     ot: boolean;
     payroll: boolean;

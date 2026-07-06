@@ -11,7 +11,10 @@ export declare class DashboardController {
                     id: string;
                     firstName: string;
                     lastName: string;
+                    nickname: string | undefined;
                     employeeCode: string | undefined;
+                    phone: string | undefined;
+                    branchName: string | undefined;
                 } | null;
                 status: "CANCELLED" | "PENDING" | "APPROVED" | "REJECTED";
                 leaveTypeName: string | null;
@@ -22,7 +25,10 @@ export declare class DashboardController {
                     id: string;
                     firstName: string;
                     lastName: string;
+                    nickname: string | undefined;
                     employeeCode: string | undefined;
+                    phone: string | undefined;
+                    branchName: string | undefined;
                 } | null;
                 status: "PENDING" | "APPROVED" | "REJECTED";
                 outsideType: string;
@@ -33,7 +39,10 @@ export declare class DashboardController {
                     id: string;
                     firstName: string;
                     lastName: string;
+                    nickname: string | undefined;
                     employeeCode: string | undefined;
+                    phone: string | undefined;
+                    branchName: string | undefined;
                 } | null;
                 status: "CANCELLED" | "PENDING" | "APPROVED" | "REJECTED";
                 workDate: Date;

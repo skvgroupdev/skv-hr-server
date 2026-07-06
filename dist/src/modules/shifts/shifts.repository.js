@@ -93,6 +93,19 @@ let ShiftsRepository = class ShiftsRepository {
             .findOneAndUpdate({ _id: id, tenantId }, { endDate }, { returnDocument: 'after' })
             .exec();
     }
+    updateAssignment(id, tenantId, shiftId, effectiveDate, endDate) {
+        return this.assignmentModel
+            .findOneAndUpdate({ _id: id, tenantId }, {
+            $set: {
+                shiftId,
+                effectiveDate,
+                ...(endDate ? { endDate } : {}),
+            },
+            ...(!endDate ? { $unset: { endDate: 1 } } : {}),
+        }, { returnDocument: 'after' })
+            .populate('shiftId')
+            .exec();
+    }
     async findCurrentAssignmentsByEmployeeIds(employeeIds, tenantId) {
         const today = new Date();
         today.setUTCHours(0, 0, 0, 0);

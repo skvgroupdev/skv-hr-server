@@ -16,6 +16,7 @@ class PlanFeaturesDto {
     attendance;
     shiftManagement;
     attendanceAdjustment;
+    outsideWork;
     leave;
     ot;
     payroll;
@@ -38,6 +39,11 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], PlanFeaturesDto.prototype, "attendanceAdjustment", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], PlanFeaturesDto.prototype, "outsideWork", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),

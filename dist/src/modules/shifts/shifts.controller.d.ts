@@ -53,13 +53,13 @@ export declare class ShiftsController {
         }) | null;
     }>;
     assign(id: string, dto: AssignShiftDto, user: JwtPayload): Promise<{
-        data: import("mongoose").Document<unknown, {}, import("./schemas/shift-assignment.schema").ShiftAssignment, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/shift-assignment.schema").ShiftAssignment & {
+        data: (import("mongoose").Document<unknown, {}, import("./schemas/shift-assignment.schema").ShiftAssignment, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/shift-assignment.schema").ShiftAssignment & {
             _id: import("mongoose").Types.ObjectId;
         } & {
             __v: number;
         } & {
             id: string;
-        };
+        }) | null;
     }>;
     getEmployeeShift(id: string, user: JwtPayload): Promise<{
         data: import("mongoose").Document<unknown, {}, import("./schemas/shift-assignment.schema").ShiftAssignment, {}, import("mongoose").DefaultSchemaOptions> & import("./schemas/shift-assignment.schema").ShiftAssignment & {

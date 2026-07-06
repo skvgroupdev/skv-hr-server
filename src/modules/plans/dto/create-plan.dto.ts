@@ -23,6 +23,10 @@ class PlanFeaturesDto {
 
   @IsOptional()
   @IsBoolean()
+  outsideWork?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   leave?: boolean;
 
   @IsOptional()

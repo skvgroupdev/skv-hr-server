@@ -21,6 +21,7 @@ const outside_work_query_dto_1 = require("./dto/outside-work-query.dto");
 const roles_decorator_1 = require("../../common/decorators/roles.decorator");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
 const roles_guard_1 = require("../../common/guards/roles.guard");
+const require_features_decorator_1 = require("../../common/decorators/require-features.decorator");
 let OutsideWorkController = class OutsideWorkController {
     outsideWorkService;
     constructor(outsideWorkService) {
@@ -121,6 +122,7 @@ __decorate([
 exports.OutsideWorkController = OutsideWorkController = __decorate([
     (0, common_1.Controller)('outside-work'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, require_features_decorator_1.RequireFeatures)('outsideWork'),
     __metadata("design:paramtypes", [outside_work_service_1.OutsideWorkService])
 ], OutsideWorkController);
 //# sourceMappingURL=outside-work.controller.js.map

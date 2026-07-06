@@ -94,13 +94,25 @@ export class DashboardRepository {
     ]);
 
     const mapEmployee = (emp: unknown) => {
-      const e = emp as { _id?: unknown; id?: string; firstName?: string; lastName?: string; employeeCode?: string } | null;
+      const e = emp as {
+        _id?: unknown;
+        id?: string;
+        firstName?: string;
+        lastName?: string;
+        nickname?: string;
+        employeeCode?: string;
+        phone?: string;
+        branchId?: { name?: string } | null;
+      } | null;
       if (!e) return null;
       return {
         id: e.id ?? (e._id as { toString(): string })?.toString() ?? '',
         firstName: e.firstName ?? '',
         lastName: e.lastName ?? '',
+        nickname: e.nickname,
         employeeCode: e.employeeCode,
+        phone: e.phone,
+        branchName: e.branchId?.name,
       };
     };
 

@@ -52,7 +52,11 @@ let AttendanceAdjustmentsRepository = class AttendanceAdjustmentsRepository {
         end.setHours(23, 59, 59, 999);
         return this.model
             .find({ tenantId, workDate: { $gte: start, $lte: end }, status: { $in: ['PENDING', 'APPROVED'] } })
-            .populate('employeeId', 'firstName lastName employeeCode')
+            .populate({
+            path: 'employeeId',
+            select: 'firstName lastName nickname employeeCode phone branchId',
+            populate: { path: 'branchId', select: 'name' },
+        })
             .sort({ createdAt: -1 })
             .exec();
     }

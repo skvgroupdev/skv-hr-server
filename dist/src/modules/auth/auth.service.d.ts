@@ -48,5 +48,7 @@ export declare class AuthService {
     private toUserPayload;
     private getFeatures;
     private getSubscriptionSummary;
+    private getTenantPlan;
+    private resolvePlan;
 }
 export {};

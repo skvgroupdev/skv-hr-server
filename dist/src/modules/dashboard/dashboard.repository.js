@@ -111,7 +111,10 @@ let DashboardRepository = class DashboardRepository {
                 id: e.id ?? e._id?.toString() ?? '',
                 firstName: e.firstName ?? '',
                 lastName: e.lastName ?? '',
+                nickname: e.nickname,
                 employeeCode: e.employeeCode,
+                phone: e.phone,
+                branchName: e.branchId?.name,
             };
         };
         return {

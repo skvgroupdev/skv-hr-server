@@ -57,7 +57,11 @@ let OutsideWorkRepository = class OutsideWorkRepository {
             createdAt: { $gte: start, $lte: end },
         })
             .select('employeeId status outsideType')
-            .populate('employeeId', 'firstName lastName employeeCode')
+            .populate({
+            path: 'employeeId',
+            select: 'firstName lastName nickname employeeCode phone branchId',
+            populate: { path: 'branchId', select: 'name' },
+        })
             .lean()
             .exec();
     }

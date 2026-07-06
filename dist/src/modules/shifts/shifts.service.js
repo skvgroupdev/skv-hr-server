@@ -66,6 +66,9 @@ let ShiftsService = class ShiftsService {
         if (overlap) {
             const existingStart = new Date(overlap.effectiveDate);
             const isOpenEnded = !overlap.endDate;
+            if (existingStart.getTime() === effectiveDate.getTime()) {
+                return this.shiftsRepository.updateAssignment(overlap._id, tenantObjectId, new mongoose_1.Types.ObjectId(shiftId), effectiveDate, endDate);
+            }
             if (!endDate && isOpenEnded && existingStart < effectiveDate) {
                 const previousDay = new Date(effectiveDate);
                 previousDay.setUTCDate(previousDay.getUTCDate() - 1);

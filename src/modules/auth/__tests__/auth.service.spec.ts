@@ -40,6 +40,8 @@ describe('AuthService', () => {
   let usersRepository: jest.Mocked<UsersRepository>;
   let jwtService: jest.Mocked<JwtService>;
   let auditLogService: jest.Mocked<AuditLogService>;
+  let companiesRepository: jest.Mocked<CompaniesRepository>;
+  let plansRepository: jest.Mocked<PlansRepository>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -105,6 +107,8 @@ describe('AuthService', () => {
     usersRepository = module.get(UsersRepository);
     jwtService = module.get(JwtService);
     auditLogService = module.get(AuditLogService);
+    companiesRepository = module.get(CompaniesRepository);
+    plansRepository = module.get(PlansRepository);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -269,6 +273,72 @@ describe('AuthService', () => {
       const result = await service.getMe(mockUserId.toString());
 
       expect(result.phone).toBe(user.phone);
+    });
+
+    it('should return tenant features from a populated company plan', async () => {
+      const user = makeUser();
+      const planId = new Types.ObjectId();
+      const populatedPlan = {
+        _id: planId,
+        name: 'pro',
+        features: {
+          attendance: true,
+          shiftManagement: true,
+          attendanceAdjustment: true,
+          outsideWork: true,
+          leave: true,
+          ot: false,
+          payroll: true,
+          restDayCompensation: true,
+          advancedReport: true,
+          announcement: true,
+        },
+      };
+      usersRepository.findById.mockResolvedValue(user);
+      companiesRepository.findById.mockResolvedValue({
+        planId: populatedPlan,
+        subscription: { status: 'ACTIVE', isPaid: true },
+      } as never);
+
+      const result = await service.getMe(mockUserId.toString());
+
+      expect(result.features?.ot).toBe(false);
+      expect(result.features?.payroll).toBe(true);
+      expect(result.subscriptionSummary?.planId).toBe(planId.toString());
+      expect(plansRepository.findById).not.toHaveBeenCalled();
+    });
+
+    it('should serialize every feature from a Mongoose plan subdocument', async () => {
+      const user = makeUser();
+      const planId = new Types.ObjectId();
+      const featureValues = {
+        attendance: true,
+        shiftManagement: true,
+        attendanceAdjustment: true,
+        outsideWork: true,
+        leave: true,
+        ot: false,
+        payroll: true,
+        restDayCompensation: true,
+        advancedReport: true,
+        announcement: true,
+      };
+      const mongooseFeatures = {
+        toObject: () => featureValues,
+      };
+      usersRepository.findById.mockResolvedValue(user);
+      companiesRepository.findById.mockResolvedValue({
+        planId: {
+          _id: planId,
+          name: 'pro',
+          features: mongooseFeatures,
+        },
+        subscription: { status: 'ACTIVE', isPaid: true },
+      } as never);
+
+      const result = await service.getMe(mockUserId.toString());
+
+      expect(result.features).toEqual(featureValues);
     });
 
     it('should throw UnauthorizedException when user not found', async () => {

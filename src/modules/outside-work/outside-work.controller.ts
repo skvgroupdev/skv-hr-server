@@ -7,9 +7,11 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { RequireFeatures } from '../../common/decorators/require-features.decorator';
 
 @Controller('outside-work')
 @UseGuards(RolesGuard)
+@RequireFeatures('outsideWork')
 export class OutsideWorkController {
   constructor(private readonly outsideWorkService: OutsideWorkService) {}
 

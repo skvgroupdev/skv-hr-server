@@ -249,13 +249,25 @@ let AuthService = class AuthService {
         };
     }
     async getFeatures(companyId) {
-        if (!companyId)
+        const plan = await this.getTenantPlan(companyId);
+        if (!plan?.features)
             return undefined;
-        const company = await this.companiesRepository.findById(companyId);
-        if (!company?.planId)
-            return undefined;
-        const plan = await this.plansRepository.findById(company.planId.toString());
-        return plan?.features;
+        const features = typeof plan.features
+            .toObject === 'function'
+            ? plan.features.toObject()
+            : plan.features;
+        return {
+            attendance: features.attendance,
+            shiftManagement: features.shiftManagement,
+            attendanceAdjustment: features.attendanceAdjustment,
+            outsideWork: features.outsideWork ?? true,
+            leave: features.leave,
+            ot: features.ot,
+            payroll: features.payroll,
+            restDayCompensation: features.restDayCompensation,
+            advancedReport: features.advancedReport,
+            announcement: features.announcement,
+        };
     }
     async getSubscriptionSummary(companyId) {
         if (!companyId)
@@ -263,16 +275,32 @@ let AuthService = class AuthService {
         const company = await this.companiesRepository.findById(companyId);
         if (!company?.planId)
             return undefined;
-        const plan = await this.plansRepository.findById(company.planId.toString());
+        const plan = await this.resolvePlan(company.planId);
         if (!plan)
             return undefined;
         return {
-            planId: company.planId.toString(),
+            planId: plan._id.toString(),
             planName: plan.name,
             status: company.subscription?.status ?? 'TRIAL',
             endDate: company.subscription?.endDate?.toISOString() ?? null,
             isPaid: company.subscription?.isPaid ?? false,
         };
+    }
+    async getTenantPlan(companyId) {
+        if (!companyId)
+            return null;
+        const company = await this.companiesRepository.findById(companyId);
+        if (!company?.planId)
+            return null;
+        return this.resolvePlan(company.planId);
+    }
+    async resolvePlan(planRef) {
+        const populatedPlan = planRef;
+        if (populatedPlan?.features)
+            return populatedPlan;
+        const rawId = planRef;
+        const planId = rawId?._id?.toString() ?? planRef.toString();
+        return this.plansRepository.findById(planId);
     }
 };
 exports.AuthService = AuthService;

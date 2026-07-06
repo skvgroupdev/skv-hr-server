@@ -80,7 +80,10 @@ export class SubscriptionGuard implements CanActivate {
 
     const plan = await this.plansRepository.findById(company.planId.toString());
     const missingFeature = requiredFeatures.find(
-      (feature) => !plan?.features?.[feature],
+      (feature) =>
+        feature === 'outsideWork'
+          ? plan?.features?.outsideWork === false
+          : !plan?.features?.[feature],
     );
     if (missingFeature) {
       throw new ForbiddenException(
